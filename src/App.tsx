@@ -122,13 +122,17 @@ export default function App() {
     setActiveAlerts(newAlerts);
   }, [processedEvents, dismissedAlerts, soundEnabled, notificationSettings, notificationsEnabled]);
 
-  const categories = ['All', 'MvP', 'PvP', 'Minigame', 'Special', 'Premiação: Galhos'];
+  const categories = ['All', 'MvP', 'PvP', 'Minigame', 'Special', 'Premiação: Galhos', 'Premiação: Arca'];
 
   const filteredEvents = processedEvents.filter(instance => {
     if (selectedCategory === 'All') return true;
     if (selectedCategory === 'Premiação: Galhos') {
       const prizes = instance.event.prizes.join(' ').toLowerCase();
       return prizes.includes('galho') || prizes.includes('sangrento') || prizes.includes('pandora');
+    }
+    if (selectedCategory === 'Premiação: Arca') {
+      const prizes = instance.event.prizes.join(' ').toLowerCase();
+      return prizes.includes('arca ancestral') || prizes.includes('svartalfheim');
     }
     return instance.event.category === selectedCategory;
   });
