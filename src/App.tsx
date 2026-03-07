@@ -15,7 +15,8 @@ import {
   Trash2,
   X,
   Coins,
-  Zap
+  Zap,
+  ChevronUp
 } from 'lucide-react';
 import { RAGNAROK_EVENTS, ROEvent } from './constants';
 
@@ -32,7 +33,7 @@ const minutesToTime = (totalMinutes: number) => {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 };
 
-// Helper to play a notification sound (Bell-like)
+// Helper to play a notification sound (Double Bell-like "ding-ding")
 const playNotificationSound = async () => {
   try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -45,35 +46,32 @@ const playNotificationSound = async () => {
       await audioContext.resume();
     }
 
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
+    const playDing = (startTime: number, frequency: number) => {
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
 
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
 
-    // Create a "ding" sound with harmonics for a bell-like effect
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(880, audioContext.currentTime); 
-    oscillator.frequency.exponentialRampToValueAtTime(440, audioContext.currentTime + 0.5); 
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(frequency, startTime); 
+      oscillator.frequency.exponentialRampToValueAtTime(frequency / 2, startTime + 0.4); 
 
-    const oscillator2 = audioContext.createOscillator();
-    oscillator2.connect(gainNode);
-    oscillator2.type = 'sine';
-    oscillator2.frequency.setValueAtTime(1760, audioContext.currentTime); 
-    oscillator2.frequency.exponentialRampToValueAtTime(880, audioContext.currentTime + 0.5); 
+      gainNode.gain.setValueAtTime(0.2, startTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + 0.4);
 
-    gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
+      oscillator.start(startTime);
+      oscillator.stop(startTime + 0.4);
+    };
 
-    oscillator.start();
-    oscillator2.start();
-    oscillator.stop(audioContext.currentTime + 0.5);
-    oscillator2.stop(audioContext.currentTime + 0.5);
-    
-    // Close context after sound finishes to save resources
+    const now = audioContext.currentTime;
+    playDing(now, 880);      // First ding
+    playDing(now + 0.15, 1046.50); // Second ding (C6) slightly higher and after
+
+    // Close context after sound finishes
     setTimeout(() => {
       audioContext.close();
-    }, 1000);
+    }, 1500);
   } catch (e) {
     console.warn('Não foi possível tocar o som de notificação:', e);
   }
@@ -120,6 +118,20 @@ export default function App() {
   const [formPrize, setFormPrize] = useState('');
   const [formDesc, setFormDesc] = useState('');
   const [formCategory, setFormCategory] = useState<ROEvent['category']>('Special');
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  // Scroll to top logic
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 400);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   // Save custom events to localStorage
   useEffect(() => {
@@ -281,8 +293,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-emerald-50 font-sans selection:bg-yellow-500/30">
-      {/* Leprechaun Background GIF */}
+      {/* Background Layer */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+        {/* Main Background GIF */}
         <img 
           src="https://i.pinimg.com/originals/12/a9/b5/12a9b50719fbdef8ae7a18f9bb883963.gif" 
           alt="Background" 
@@ -296,7 +309,7 @@ export default function App() {
       <header className="sticky top-0 z-50 bg-white/10 backdrop-blur-[2px] border-b border-white/20 px-6 py-4">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="p-1 bg-gradient-to-br from-emerald-500 to-yellow-500 rounded-lg shadow-lg shadow-emerald-500/20">
+            <div className="p-1.5 bg-gradient-to-br from-emerald-500 to-yellow-500 rounded-full shadow-lg shadow-emerald-500/30">
               <img 
                 src="https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png" 
                 alt="Leprechaun Icon" 
@@ -311,6 +324,14 @@ export default function App() {
               <p className="text-xs text-emerald-400/70 font-mono flex items-center gap-2">
                 <Coins size={12} className="text-yellow-500" />
                 SERVER TIME: {currentTime.toLocaleTimeString()}
+                <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter flex items-center gap-1 ${
+                  notificationsEnabled && soundEnabled 
+                  ? 'bg-emerald-500/20 text-emerald-400 animate-pulse' 
+                  : 'bg-red-500/20 text-red-400'
+                }`}>
+                  <Zap size={10} />
+                  {notificationsEnabled && soundEnabled ? 'Notificações Ativas' : 'Alertas Desligados'}
+                </span>
               </p>
             </div>
           </div>
@@ -394,7 +415,17 @@ export default function App() {
       </header>
 
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
+      <main className="max-w-6xl mx-auto px-6 py-8 relative z-10">
+        {/* Magic Book Decorative Section */}
+        <div className="flex justify-center mb-6">
+          <img 
+            src="https://i.pinimg.com/originals/73/69/6e/73696e022df7cd5cb3d999c6875361dd.gif" 
+            alt="Magic Book" 
+            className="w-32 h-32 object-contain drop-shadow-[0_0_15px_rgba(16,185,129,0.4)]"
+            referrerPolicy="no-referrer"
+          />
+        </div>
+
         {/* Active Alerts Section */}
         <AnimatePresence>
           {activeAlerts.length > 0 && (
@@ -418,8 +449,8 @@ export default function App() {
                       className="bg-white/10 backdrop-blur-[2px] border border-white/20 p-4 rounded-xl flex items-center justify-between gap-4"
                     >
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center animate-bounce">
-                          <Coins className="text-emerald-950" />
+                        <div className="p-2 bg-yellow-500 rounded-full flex items-center justify-center animate-bounce shadow-[0_0_15px_rgba(234,179,8,0.5)]">
+                          <Coins size={20} className="text-emerald-950" />
                         </div>
                         <div>
                           <h3 className="font-bold text-yellow-500 flex items-center gap-2">
@@ -445,15 +476,15 @@ export default function App() {
         </AnimatePresence>
 
         {/* Filters */}
-        <div className="flex flex-wrap items-center gap-2 mb-8">
+        <div className="flex flex-wrap items-center justify-center gap-2 mb-8">
           {categories.map(cat => (
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all backdrop-blur-[2px] ${
+              className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all backdrop-blur-md border ${
                 selectedCategory === cat 
-                ? 'bg-gradient-to-r from-emerald-500 to-yellow-500 text-white shadow-md shadow-emerald-500/20' 
-                : 'bg-white/10 text-white border border-white/20 hover:bg-white/20'
+                ? 'bg-gradient-to-r from-emerald-500 to-yellow-500 text-white shadow-md shadow-emerald-500/20 border-emerald-400' 
+                : 'bg-emerald-950/70 text-emerald-400 border-emerald-500/30 hover:bg-emerald-900/80 hover:text-white'
               }`}
             >
               {cat}
@@ -489,10 +520,12 @@ export default function App() {
 
               {/* Category Badge */}
               <div className="absolute top-5 right-5">
-                {instance.event.category === 'MvP' && <Sword className="w-4 h-4 text-red-500" />}
-                {instance.event.category === 'PvP' && <Trophy className="w-4 h-4 text-yellow-600" />}
-                {instance.event.category === 'Minigame' && <Gamepad2 className="w-4 h-4 text-blue-500" />}
-                {instance.event.category === 'Special' && <Sparkles className="w-4 h-4 text-emerald-500" />}
+                <div className="p-[3px] bg-emerald-950/90 backdrop-blur-md rounded-full border border-emerald-500/40 shadow-xl flex items-center justify-center">
+                  {instance.event.category === 'MvP' && <Sword className="w-4 h-4 text-red-500" />}
+                  {instance.event.category === 'PvP' && <Trophy className="w-4 h-4 text-yellow-600" />}
+                  {instance.event.category === 'Minigame' && <Gamepad2 className="w-4 h-4 text-blue-500" />}
+                  {instance.event.category === 'Special' && <Sparkles className="w-4 h-4 text-emerald-500" />}
+                </div>
               </div>
 
               <div className="mb-4">
@@ -507,7 +540,11 @@ export default function App() {
                   </span>
                 </div>
                 <h2 className="text-lg font-bold text-emerald-50 group-hover:text-yellow-400 transition-colors flex items-center gap-2">
-                  {instance.isCustom && <Plus size={14} className="text-yellow-500" />}
+                  {instance.isCustom && (
+                    <span className="p-1 bg-yellow-500/20 rounded-full border border-yellow-500/30">
+                      <Plus size={12} className="text-yellow-500" />
+                    </span>
+                  )}
                   {instance.event.name}
                 </h2>
               </div>
@@ -646,18 +683,18 @@ export default function App() {
       </AnimatePresence>
 
       {/* Footer Info */}
-      <footer className="max-w-6xl mx-auto px-6 py-12 border-t border-white/10 mt-12 bg-white/10 backdrop-blur-[2px] rounded-t-3xl">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-sm text-white/60">
+      <footer className="max-w-6xl mx-auto px-6 py-12 border-t border-emerald-500/30 mt-12 bg-emerald-950/70 backdrop-blur-md rounded-t-3xl">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-sm text-emerald-50/80">
           <div>
             <h4 className="text-emerald-400 font-bold mb-3 uppercase tracking-wider text-xs">Sobre o App</h4>
-            <p>Sincronizado com o horário do servidor. Alertas automáticos 2 minutos antes de cada evento para você não perder nenhum drop da sorte.</p>
+            <p className="leading-relaxed">Sincronizado com o horário do servidor. Alertas automáticos 2 minutos antes de cada evento para você não perder nenhum drop da sorte.</p>
           </div>
           <div>
             <h4 className="text-emerald-400 font-bold mb-3 uppercase tracking-wider text-xs">Legenda da Sorte</h4>
             <ul className="space-y-2">
-              <li className="flex items-center gap-2"><Sword size={14} className="text-red-400" /> MvP - Chefes de Mundo</li>
-              <li className="flex items-center gap-2"><Trophy size={14} className="text-yellow-400" /> PvP - Batalhas entre jogadores</li>
-              <li className="flex items-center gap-2"><Gamepad2 size={14} className="text-blue-400" /> Minigames - Diversão e sorte</li>
+              <li className="flex items-center gap-2"><Sword size={14} className="text-red-400" /> <span className="text-emerald-100">MvP - Chefes de Mundo</span></li>
+              <li className="flex items-center gap-2"><Trophy size={14} className="text-yellow-400" /> <span className="text-emerald-100">PvP - Batalhas entre jogadores</span></li>
+              <li className="flex items-center gap-2"><Gamepad2 size={14} className="text-blue-400" /> <span className="text-emerald-100">Minigames - Diversão e sorte</span></li>
               <li className="flex items-center gap-2">
                 <img 
                   src="https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png" 
@@ -665,19 +702,35 @@ export default function App() {
                   className="w-4 h-4 object-contain"
                   referrerPolicy="no-referrer"
                 /> 
-                Leprechaun - Eventos Especiais
+                <span className="text-emerald-100">Leprechaun - Eventos Especiais</span>
               </li>
             </ul>
           </div>
           <div>
             <h4 className="text-emerald-400 font-bold mb-3 uppercase tracking-wider text-xs">Configurações</h4>
-            <p>Ative as notificações do navegador para receber alertas mesmo com a aba em segundo plano. Que a sorte esteja com você!</p>
+            <p className="leading-relaxed">Ative as notificações do navegador para receber alertas mesmo com a aba em segundo plano. Que a sorte esteja com você!</p>
           </div>
         </div>
-        <div className="mt-12 pt-8 border-t border-emerald-500/10 text-center text-xs text-emerald-700">
+        <div className="mt-12 pt-8 border-t border-emerald-500/20 text-center text-xs text-emerald-400 font-medium">
           &copy; 2026 Ragnarok Event Tracker - Leprechaun Sorte Edition.
         </div>
       </footer>
+
+      {/* Scroll to Top Button */}
+      <AnimatePresence>
+        {showScrollTop && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.5, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.5, y: 20 }}
+            onClick={scrollToTop}
+            className="fixed bottom-8 right-8 z-[100] p-4 bg-emerald-950/80 backdrop-blur-md border border-emerald-500/30 text-emerald-400 rounded-full shadow-2xl hover:bg-emerald-500 hover:text-white transition-all group"
+            title="Voltar ao Topo"
+          >
+            <ChevronUp size={24} className="group-hover:-translate-y-1 transition-transform" />
+          </motion.button>
+        )}
+      </AnimatePresence>
 
     </div>
   );
