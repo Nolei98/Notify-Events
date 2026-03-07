@@ -250,7 +250,7 @@ export default function App() {
       </div>
 
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-emerald-950/5 backdrop-blur-[1px] border-b border-emerald-500/5 px-6 py-4">
+      <header className="sticky top-0 z-50 bg-white/10 backdrop-blur-[2px] border-b border-white/20 px-6 py-4">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="p-1 bg-gradient-to-br from-emerald-500 to-yellow-500 rounded-lg shadow-lg shadow-emerald-500/20">
@@ -372,7 +372,7 @@ export default function App() {
                       layout
                       initial={{ x: -20, opacity: 0 }}
                       animate={{ x: 0, opacity: 1 }}
-                      className="bg-yellow-500/5 backdrop-blur-[1px] border border-yellow-500/10 p-4 rounded-xl flex items-center justify-between gap-4"
+                      className="bg-white/10 backdrop-blur-[2px] border border-white/20 p-4 rounded-xl flex items-center justify-between gap-4"
                     >
                       <div className="flex items-center gap-4">
                         <div className="w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center animate-bounce">
@@ -407,10 +407,10 @@ export default function App() {
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all backdrop-blur-[1px] ${
+              className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all backdrop-blur-[2px] ${
                 selectedCategory === cat 
                 ? 'bg-gradient-to-r from-emerald-500 to-yellow-500 text-white shadow-md shadow-emerald-500/20' 
-                : 'bg-emerald-950/5 text-emerald-400 border border-emerald-500/5 hover:bg-emerald-900/10 hover:text-white'
+                : 'bg-white/10 text-white border border-white/20 hover:bg-white/20'
               }`}
             >
               {cat}
@@ -427,8 +427,8 @@ export default function App() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.05 }}
-              className={`group relative bg-emerald-950/5 backdrop-blur-[1px] border border-emerald-500/5 rounded-2xl p-5 hover:border-yellow-500/20 hover:bg-emerald-900/10 transition-all ${
-                instance.diff <= 10 ? 'ring-2 ring-emerald-500/10' : ''
+              className={`group relative bg-white/10 backdrop-blur-[2px] border border-white/20 rounded-2xl p-5 hover:border-yellow-500/40 hover:bg-white/20 transition-all ${
+                instance.diff <= 10 ? 'ring-2 ring-emerald-500/30' : ''
               }`}
             >
               {/* Gold top border on hover */}
@@ -603,8 +603,8 @@ export default function App() {
       </AnimatePresence>
 
       {/* Footer Info */}
-      <footer className="max-w-6xl mx-auto px-6 py-12 border-t border-emerald-500/5 mt-12 bg-emerald-950/5 backdrop-blur-[1px] rounded-t-3xl">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-sm text-emerald-100/30">
+      <footer className="max-w-6xl mx-auto px-6 py-12 border-t border-white/10 mt-12 bg-white/10 backdrop-blur-[2px] rounded-t-3xl">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-sm text-white/60">
           <div>
             <h4 className="text-emerald-400 font-bold mb-3 uppercase tracking-wider text-xs">Sobre o App</h4>
             <p>Sincronizado com o horário do servidor. Alertas automáticos 2 minutos antes de cada evento para você não perder nenhum drop da sorte.</p>
