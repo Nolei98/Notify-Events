@@ -37,7 +37,9 @@ export default function App() {
     MvP: true,
     PvP: true,
     Minigame: true,
-    Special: true
+    Special: true,
+    Galhos: true,
+    Arca: true
   });
   const [isNotifMenuOpen, setIsNotifMenuOpen] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -106,11 +108,19 @@ export default function App() {
     processedEvents.forEach(instance => {
       const alertId = `${instance.event.id}-${instance.time}`;
       
-      // Check if this category is enabled for notifications
-      const isCategoryEnabled = notificationSettings[instance.event.category] !== false;
+      const prizes = instance.event.prizes.join(' ').toLowerCase();
+      const hasGalhos = prizes.includes('galho') || prizes.includes('sangrento') || prizes.includes('pandora');
+      const hasArca = prizes.includes('arca ancestral') || prizes.includes('svartalfheim');
 
-      // Alert if exactly 2 minutes or 1 minute before, not dismissed, and category enabled
-      if (instance.diff <= 2 && instance.diff > 0 && !dismissedAlerts.has(alertId) && isCategoryEnabled) {
+      // Check if this category or specific item is enabled for notifications
+      const isCategoryEnabled = notificationSettings[instance.event.category] === true;
+      const isGalhosEnabled = notificationSettings['Galhos'] === true && hasGalhos;
+      const isArcaEnabled = notificationSettings['Arca'] === true && hasArca;
+
+      const shouldNotify = isCategoryEnabled || isGalhosEnabled || isArcaEnabled;
+
+      // Alert if exactly 2 minutes or 1 minute before, not dismissed, and enabled
+      if (instance.diff <= 2 && instance.diff > 0 && !dismissedAlerts.has(alertId) && shouldNotify) {
         newAlerts.push(alertId);
       }
     });
@@ -208,7 +218,7 @@ export default function App() {
                     >
                       <h3 className="text-xs font-black text-zinc-500 uppercase tracking-widest mb-3 px-1">Notificar Categorias</h3>
                       <div className="space-y-1">
-                        {['MvP', 'PvP', 'Minigame', 'Special'].map(cat => (
+                        {['MvP', 'PvP', 'Minigame', 'Special', 'Galhos', 'Arca'].map(cat => (
                           <label key={cat} className="flex items-center justify-between p-2 hover:bg-zinc-800 rounded-lg cursor-pointer transition-colors group">
                             <span className="text-sm font-bold text-zinc-300 group-hover:text-white">{cat}</span>
                             <input 
