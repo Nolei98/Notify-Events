@@ -438,11 +438,11 @@ export default function App() {
 
 
       <main className="max-w-6xl mx-auto px-6 py-8 relative z-10">
-        {/* Magic Book Decorative Section */}
+        {/* Magic Stone Decorative Section */}
         <div className="flex justify-center mb-6">
           <img 
-            src="https://i.pinimg.com/originals/73/69/6e/73696e022df7cd5cb3d999c6875361dd.gif" 
-            alt="Magic Book" 
+            src="https://i.pinimg.com/originals/3f/05/d8/3f05d83924eef0ed0561fa2352a7b9d4.gif" 
+            alt="Magic Stone" 
             className="w-32 h-32 object-contain drop-shadow-[0_0_15px_rgba(16,185,129,0.4)]"
             referrerPolicy="no-referrer"
           />
