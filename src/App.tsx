@@ -33,45 +33,27 @@ const minutesToTime = (totalMinutes: number) => {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 };
 
-// Helper to play a notification sound (Double Bell-like "ding-ding")
+// Helper to play a notification sound
 const playNotificationSound = async () => {
   try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextClass) return;
+    // Direct link to the MyInstants sound provided by the user
+    const soundUrl = 'https://www.myinstants.com/media/sounds/world-series-nations-cup.mp3';
+    const audio = new Audio(soundUrl);
     
-    const audioContext = new AudioContextClass();
+    audio.volume = 0.6;
+    const playPromise = audio.play();
     
-    // Resume context if suspended (browser policy)
-    if (audioContext.state === 'suspended') {
-      await audioContext.resume();
+    if (playPromise !== undefined) {
+      playPromise.catch(error => {
+        console.warn('Autoplay bloqueado ou erro no áudio:', error);
+      });
     }
 
-    const playDing = (startTime: number, frequency: number) => {
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(frequency, startTime); 
-      oscillator.frequency.exponentialRampToValueAtTime(frequency / 2, startTime + 0.4); 
-
-      gainNode.gain.setValueAtTime(0.2, startTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + 0.4);
-
-      oscillator.start(startTime);
-      oscillator.stop(startTime + 0.4);
-    };
-
-    const now = audioContext.currentTime;
-    playDing(now, 880);      // First ding
-    playDing(now + 0.15, 1046.50); // Second ding (C6) slightly higher and after
-
-    // Close context after sound finishes
+    // Stop after 5 seconds as requested
     setTimeout(() => {
-      audioContext.close();
-    }, 1500);
+      audio.pause();
+      audio.currentTime = 0;
+    }, 5000);
   } catch (e) {
     console.warn('Não foi possível tocar o som de notificação:', e);
   }
@@ -123,7 +105,7 @@ export default function App() {
   // Scroll to top logic
   useEffect(() => {
     const handleScroll = () => {
-      setShowScrollTop(window.scrollY > 400);
+      setShowScrollTop(window.scrollY > 150);
     };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
@@ -306,7 +288,7 @@ export default function App() {
       </div>
 
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/10 backdrop-blur-[2px] border-b border-white/20 px-6 py-4">
+      <header className="z-50 bg-white/10 backdrop-blur-[2px] border-b border-white/20 px-6 py-4">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex flex-col items-center text-center md:flex-row md:text-left md:items-center gap-3">
             <div className="p-1.5 bg-gradient-to-br from-emerald-500 to-yellow-500 rounded-full shadow-lg shadow-emerald-500/30">
@@ -428,54 +410,8 @@ export default function App() {
           />
         </div>
 
-        {/* Active Alerts Section */}
-        <AnimatePresence>
-          {activeAlerts.length > 0 && (
-            <motion.div 
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="mb-8 overflow-hidden"
-            >
-              <div className="space-y-3">
-                {activeAlerts.map(alertId => {
-                  const [eventId, time] = alertId.split('-');
-                  const event = [...RAGNAROK_EVENTS, ...customEvents].find(e => e.id === eventId);
-                  if (!event) return null;
-                  return (
-                    <motion.div 
-                      key={alertId}
-                      layout
-                      initial={{ x: -20, opacity: 0 }}
-                      animate={{ x: 0, opacity: 1 }}
-                      className="bg-white/10 backdrop-blur-[2px] border border-white/20 p-4 rounded-xl flex items-center justify-between gap-4"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="p-2 bg-yellow-500 rounded-full flex items-center justify-center animate-bounce shadow-[0_0_15px_rgba(234,179,8,0.5)]">
-                          <Coins size={20} className="text-emerald-950" />
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-yellow-500 flex items-center gap-2">
-                            SORTE GRANDE! EVENTO COMEÇANDO! <Sparkles size={14} />
-                          </h3>
-                          <p className="text-sm text-emerald-50">
-                            <span className="font-semibold text-white">{event.name}</span> às {time} (em menos de 2 min)
-                          </p>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={() => dismissAlert(alertId)}
-                        className="px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-400 rounded-lg text-sm font-medium transition-colors"
-                      >
-                        Entendi
-                      </button>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Active Alerts Section moved to floating action center */}
+        <div className="mb-8"></div>
 
         {/* Filters */}
         <div className="flex flex-wrap items-center justify-center gap-2 mb-8">
@@ -531,11 +467,11 @@ export default function App() {
               </div>
 
               <div className="mb-4 flex flex-col items-center text-center md:items-start md:text-left">
-                <div className="flex items-baseline gap-2 mb-1">
+                <div className="flex flex-col items-center md:flex-row md:items-baseline md:gap-2 mb-1">
                   <span className="text-3xl font-black font-mono bg-gradient-to-br from-white to-emerald-400 bg-clip-text text-transparent tracking-tighter">
                     {instance.time}
                   </span>
-                  <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase mt-1 md:mt-0 ${
                     instance.diff <= 10 ? 'bg-yellow-500 text-emerald-950' : 'bg-emerald-900/60 text-emerald-400'
                   }`}>
                     {instance.diff <= 0 ? 'AGORA' : `em ${Math.floor(instance.diff)}m`}
@@ -571,8 +507,10 @@ export default function App() {
               </div>
 
               <div className="mt-6 pt-4 border-t border-emerald-500/10 flex items-center justify-center md:justify-between">
-                <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold text-emerald-700">
-                  <span>{instance.event.category}</span>
+                <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest font-black">
+                  <span className="bg-gradient-to-r from-emerald-400 via-yellow-400 to-emerald-400 bg-clip-text text-transparent underline underline-offset-4 decoration-emerald-400/40">
+                    {instance.event.category}
+                  </span>
                   {instance.isCustom && <span className="text-yellow-600 font-black">• STAFF</span>}
                 </div>
               </div>
@@ -727,6 +665,140 @@ export default function App() {
           <p className="text-emerald-500/60 tracking-widest uppercase text-[10px]">Desenvolvido por <span className="text-emerald-400 font-black">Nolei creative</span></p>
         </div>
       </footer>
+
+      {/* Floating Action Center */}
+      <AnimatePresence>
+        {showScrollTop && (
+          <motion.div 
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            className="fixed bottom-28 right-8 z-[100] flex flex-col gap-5 items-end pointer-events-none"
+          >
+            {/* Active Alerts (Toasts) */}
+            <div className="flex flex-col gap-3 w-full max-w-[320px] pointer-events-auto">
+              <AnimatePresence>
+                {activeAlerts.map(alertId => {
+                  const [eventId, time] = alertId.split('-');
+                  const event = [...RAGNAROK_EVENTS, ...customEvents].find(e => e.id === eventId);
+                  if (!event) return null;
+                  return (
+                    <motion.div 
+                      key={alertId}
+                      layout
+                      initial={{ x: 50, opacity: 0 }}
+                      animate={{ x: 0, opacity: 1 }}
+                      exit={{ x: 50, opacity: 0 }}
+                      className="bg-red-500/90 backdrop-blur-md border border-red-400 p-4 rounded-xl flex items-center justify-between gap-4 shadow-2xl"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-white rounded-full flex items-center justify-center animate-pulse shrink-0">
+                          <Zap size={16} className="text-red-600" />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="font-black text-[10px] text-white uppercase tracking-wider">
+                            ALERTA DE EVENTO!
+                          </h3>
+                          <p className="text-xs text-white font-bold truncate">
+                            {event.name} às {time}
+                          </p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => dismissAlert(alertId)}
+                        className="p-1 hover:bg-white/20 rounded-full transition-colors shrink-0"
+                      >
+                        <X size={16} className="text-white" />
+                      </button>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            </div>
+
+            {/* Control Buttons */}
+            <div className="flex flex-col gap-5 pointer-events-auto">
+              {/* Notification Settings */}
+              <div className="relative">
+                <button 
+                  onClick={() => setIsNotifMenuOpen(!isNotifMenuOpen)}
+                  className={`p-4 rounded-full shadow-2xl transition-all ${isNotifMenuOpen ? 'bg-emerald-500 text-white' : 'bg-emerald-950/80 backdrop-blur-md border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-white'}`}
+                  title="Configurar Notificações"
+                >
+                  <Bell size={24} />
+                </button>
+                
+                <AnimatePresence>
+                  {isNotifMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setIsNotifMenuOpen(false)} />
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        className="absolute bottom-full right-0 mb-4 w-64 bg-emerald-950/90 backdrop-blur-2xl border border-emerald-500/30 rounded-2xl p-4 shadow-2xl z-50"
+                      >
+                        <h3 className="text-xs font-black text-emerald-400 uppercase tracking-widest mb-3 px-1 flex items-center gap-2">
+                          <Zap size={12} /> Notificar Categorias
+                        </h3>
+                        <div className="space-y-1">
+                          {['MvP', 'PvP', 'Minigame', 'Special', 'Galhos', 'Arca', 'Staff'].map(cat => (
+                            <label key={cat} className="flex items-center justify-between p-2 hover:bg-emerald-800/40 rounded-lg cursor-pointer transition-colors group">
+                              <span className="text-sm font-bold text-emerald-100 group-hover:text-yellow-400">{cat === 'Staff' ? 'Eventos da Staff' : cat}</span>
+                              <input 
+                                type="checkbox" 
+                                checked={notificationSettings[cat]}
+                                onChange={() => setNotificationSettings(prev => ({ ...prev, [cat]: !prev[cat] }))}
+                                className="w-4 h-4 rounded border-emerald-700 bg-emerald-900 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-emerald-950"
+                              />
+                            </label>
+                          ))}
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-emerald-500/20 space-y-2">
+                          <button 
+                            onClick={() => playNotificationSound()}
+                            className="w-full flex items-center justify-between p-2 rounded-lg bg-emerald-900/40 text-emerald-400 hover:text-white transition-all"
+                          >
+                            <span className="text-[10px] font-black uppercase tracking-wider">Testar Som</span>
+                            <Volume2 size={14} />
+                          </button>
+                          <button 
+                            onClick={() => setNotificationsEnabled(!notificationsEnabled)}
+                            className={`w-full flex items-center justify-between p-2 rounded-lg transition-all ${
+                              notificationsEnabled ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-900/40 text-emerald-600'
+                            }`}
+                          >
+                            <span className="text-xs font-black uppercase tracking-wider">Alertas Gerais</span>
+                            {notificationsEnabled ? <Bell size={14} /> : <BellOff size={14} />}
+                          </button>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Staff Button */}
+              <button 
+                onClick={() => setIsStaffPanelOpen(true)}
+                className="p-4 rounded-full bg-emerald-950/80 backdrop-blur-md border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-white shadow-2xl transition-all"
+                title="Adicionar Evento Staff"
+              >
+                <Plus size={24} />
+              </button>
+
+              {/* Sound Toggle */}
+              <button 
+                onClick={() => setSoundEnabled(!soundEnabled)}
+                className={`p-4 rounded-full shadow-2xl transition-all ${soundEnabled ? 'bg-emerald-950/80 backdrop-blur-md border border-emerald-500/30 text-yellow-400 hover:bg-emerald-500 hover:text-white' : 'bg-emerald-900/20 text-emerald-700 hover:bg-emerald-500 hover:text-white'}`}
+                title={soundEnabled ? "Som Ativado" : "Som Desativado"}
+              >
+                {soundEnabled ? <Volume2 size={24} /> : <VolumeX size={24} />}
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Scroll to Top Button */}
       <AnimatePresence>
