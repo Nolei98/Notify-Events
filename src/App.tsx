@@ -14,7 +14,6 @@ import {
   Plus,
   Trash2,
   X,
-  Clover,
   Coins,
   Zap
 } from 'lucide-react';
@@ -238,26 +237,36 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900 font-sans selection:bg-emerald-500/30">
-      {/* Leprechaun Background Elements */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-40">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-200/40 blur-[120px] rounded-full" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-yellow-200/30 blur-[120px] rounded-full" />
+    <div className="min-h-screen bg-zinc-950 text-emerald-50 font-sans selection:bg-yellow-500/30">
+      {/* Leprechaun Background GIF */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+        <img 
+          src="https://i.pinimg.com/originals/12/a9/b5/12a9b50719fbdef8ae7a18f9bb883963.gif" 
+          alt="Background" 
+          className="w-full h-full object-cover opacity-95"
+          referrerPolicy="no-referrer"
+        />
+        <div className="absolute inset-0 bg-emerald-950/5" />
       </div>
 
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-emerald-100 px-6 py-4">
+      <header className="sticky top-0 z-50 bg-emerald-950/5 backdrop-blur-[1px] border-b border-emerald-500/5 px-6 py-4">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-br from-emerald-500 to-yellow-500 rounded-lg shadow-lg shadow-emerald-500/20">
-              <Clover className="w-6 h-6 text-white animate-pulse" />
+            <div className="p-1 bg-gradient-to-br from-emerald-500 to-yellow-500 rounded-lg shadow-lg shadow-emerald-500/20">
+              <img 
+                src="https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png" 
+                alt="Leprechaun Icon" 
+                className="w-10 h-10 object-contain animate-pulse"
+                referrerPolicy="no-referrer"
+              />
             </div>
             <div>
-              <h1 className="text-xl font-black tracking-tight bg-gradient-to-r from-emerald-600 via-yellow-600 to-emerald-600 bg-clip-text text-transparent">
+              <h1 className="text-xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-yellow-400 to-emerald-400 bg-clip-text text-transparent">
                 Notify Events OmegaRO - Leprechaun Edition
               </h1>
-              <p className="text-xs text-emerald-600/70 font-mono flex items-center gap-2">
-                <Coins size={12} className="text-yellow-600" />
+              <p className="text-xs text-emerald-400/70 font-mono flex items-center gap-2">
+                <Coins size={12} className="text-yellow-500" />
                 SERVER TIME: {currentTime.toLocaleTimeString()}
               </p>
             </div>
@@ -267,7 +276,7 @@ export default function App() {
             <div className="relative">
               <button 
                 onClick={() => setIsNotifMenuOpen(!isNotifMenuOpen)}
-                className={`p-2 rounded-lg transition-colors ${isNotifMenuOpen ? 'bg-emerald-500 text-white' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}
+                className={`p-2 rounded-lg transition-colors ${isNotifMenuOpen ? 'bg-emerald-500 text-white' : 'bg-emerald-900/40 text-emerald-400 hover:text-white hover:bg-emerald-800/40'}`}
                 title="Configurar Notificações"
               >
                 <Bell size={20} />
@@ -281,28 +290,28 @@ export default function App() {
                       initial={{ opacity: 0, y: 10, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                      className="absolute right-0 mt-2 w-64 bg-white border border-emerald-100 rounded-2xl p-4 shadow-2xl z-50"
+                      className="absolute right-0 mt-2 w-64 bg-emerald-950/80 backdrop-blur-2xl border border-emerald-500/30 rounded-2xl p-4 shadow-2xl z-50"
                     >
-                      <h3 className="text-xs font-black text-emerald-600 uppercase tracking-widest mb-3 px-1 flex items-center gap-2">
+                      <h3 className="text-xs font-black text-emerald-400 uppercase tracking-widest mb-3 px-1 flex items-center gap-2">
                         <Zap size={12} /> Notificar Categorias
                       </h3>
                       <div className="space-y-1">
                         {['MvP', 'PvP', 'Minigame', 'Special', 'Galhos', 'Arca', 'Staff'].map(cat => (
-                          <label key={cat} className="flex items-center justify-between p-2 hover:bg-emerald-50 rounded-lg cursor-pointer transition-colors group">
-                            <span className="text-sm font-bold text-zinc-700 group-hover:text-emerald-600">{cat === 'Staff' ? 'Eventos da Staff' : cat}</span>
+                          <label key={cat} className="flex items-center justify-between p-2 hover:bg-emerald-800/40 rounded-lg cursor-pointer transition-colors group">
+                            <span className="text-sm font-bold text-emerald-100 group-hover:text-yellow-400">{cat === 'Staff' ? 'Eventos da Staff' : cat}</span>
                             <input 
                               type="checkbox" 
                               checked={notificationSettings[cat]}
                               onChange={() => setNotificationSettings(prev => ({ ...prev, [cat]: !prev[cat] }))}
-                              className="w-4 h-4 rounded border-emerald-200 bg-white text-emerald-600 focus:ring-emerald-500 focus:ring-offset-white"
+                              className="w-4 h-4 rounded border-emerald-700 bg-emerald-900 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-emerald-950"
                             />
                           </label>
                         ))}
                       </div>
-                      <div className="mt-3 pt-3 border-t border-emerald-50 space-y-2">
+                      <div className="mt-3 pt-3 border-t border-emerald-500/20 space-y-2">
                         <button 
                           onClick={() => playNotificationSound()}
-                          className="w-full flex items-center justify-between p-2 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-all"
+                          className="w-full flex items-center justify-between p-2 rounded-lg bg-emerald-900/40 text-emerald-400 hover:text-white transition-all"
                         >
                           <span className="text-[10px] font-black uppercase tracking-wider">Testar Som</span>
                           <Volume2 size={14} />
@@ -310,7 +319,7 @@ export default function App() {
                         <button 
                           onClick={() => setNotificationsEnabled(!notificationsEnabled)}
                           className={`w-full flex items-center justify-between p-2 rounded-lg transition-all ${
-                            notificationsEnabled ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-400'
+                            notificationsEnabled ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-900/40 text-emerald-600'
                           }`}
                         >
                           <span className="text-xs font-black uppercase tracking-wider">Alertas Gerais</span>
@@ -325,14 +334,14 @@ export default function App() {
 
             <button 
               onClick={() => setIsStaffPanelOpen(true)}
-              className="p-2 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+              className="p-2 rounded-lg bg-emerald-900/40 text-emerald-400 hover:text-white hover:bg-emerald-800/40 transition-colors"
               title="Adicionar Evento Staff"
             >
               <Plus size={20} />
             </button>
             <button 
               onClick={() => setSoundEnabled(!soundEnabled)}
-              className={`p-2 rounded-lg transition-colors ${soundEnabled ? 'bg-emerald-50 text-yellow-600' : 'bg-zinc-100 text-zinc-400'}`}
+              className={`p-2 rounded-lg transition-colors ${soundEnabled ? 'bg-emerald-900/40 text-yellow-400' : 'bg-emerald-900/20 text-emerald-700'}`}
               title={soundEnabled ? "Som Ativado" : "Som Desativado"}
             >
               {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
@@ -363,24 +372,24 @@ export default function App() {
                       layout
                       initial={{ x: -20, opacity: 0 }}
                       animate={{ x: 0, opacity: 1 }}
-                      className="bg-yellow-500/10 border border-yellow-500/30 p-4 rounded-xl flex items-center justify-between gap-4"
+                      className="bg-yellow-500/5 backdrop-blur-[1px] border border-yellow-500/10 p-4 rounded-xl flex items-center justify-between gap-4"
                     >
                       <div className="flex items-center gap-4">
                         <div className="w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center animate-bounce">
-                          <Coins className="text-emerald-900" />
+                          <Coins className="text-emerald-950" />
                         </div>
                         <div>
                           <h3 className="font-bold text-yellow-500 flex items-center gap-2">
                             SORTE GRANDE! EVENTO COMEÇANDO! <Sparkles size={14} />
                           </h3>
-                          <p className="text-sm text-zinc-600">
-                            <span className="font-semibold text-zinc-900">{event.name}</span> às {time} (em menos de 2 min)
+                          <p className="text-sm text-emerald-50">
+                            <span className="font-semibold text-white">{event.name}</span> às {time} (em menos de 2 min)
                           </p>
                         </div>
                       </div>
                       <button 
                         onClick={() => dismissAlert(alertId)}
-                        className="px-4 py-2 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-700 rounded-lg text-sm font-medium transition-colors"
+                        className="px-4 py-2 bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-400 rounded-lg text-sm font-medium transition-colors"
                       >
                         Entendi
                       </button>
@@ -398,10 +407,10 @@ export default function App() {
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all ${
+              className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all backdrop-blur-[1px] ${
                 selectedCategory === cat 
                 ? 'bg-gradient-to-r from-emerald-500 to-yellow-500 text-white shadow-md shadow-emerald-500/20' 
-                : 'bg-white text-emerald-600 border border-emerald-100 hover:bg-emerald-50'
+                : 'bg-emerald-950/5 text-emerald-400 border border-emerald-500/5 hover:bg-emerald-900/10 hover:text-white'
               }`}
             >
               {cat}
@@ -418,8 +427,8 @@ export default function App() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.05 }}
-              className={`group relative bg-white border border-emerald-100 rounded-2xl p-5 hover:border-yellow-400 hover:shadow-xl hover:shadow-emerald-500/5 transition-all ${
-                instance.diff <= 10 ? 'ring-2 ring-emerald-500/20' : ''
+              className={`group relative bg-emerald-950/5 backdrop-blur-[1px] border border-emerald-500/5 rounded-2xl p-5 hover:border-yellow-500/20 hover:bg-emerald-900/10 transition-all ${
+                instance.diff <= 10 ? 'ring-2 ring-emerald-500/10' : ''
               }`}
             >
               {/* Gold top border on hover */}
@@ -445,42 +454,42 @@ export default function App() {
 
               <div className="mb-4">
                 <div className="flex items-baseline gap-2 mb-1">
-                  <span className="text-3xl font-black font-mono bg-gradient-to-br from-zinc-900 to-emerald-600 bg-clip-text text-transparent tracking-tighter">
+                  <span className="text-3xl font-black font-mono bg-gradient-to-br from-white to-emerald-400 bg-clip-text text-transparent tracking-tighter">
                     {instance.time}
                   </span>
                   <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${
-                    instance.diff <= 10 ? 'bg-yellow-400 text-yellow-950' : 'bg-emerald-50 text-emerald-600'
+                    instance.diff <= 10 ? 'bg-yellow-500 text-emerald-950' : 'bg-emerald-900/60 text-emerald-400'
                   }`}>
                     {instance.diff <= 0 ? 'AGORA' : `em ${Math.floor(instance.diff)}m`}
                   </span>
                 </div>
-                <h2 className="text-lg font-bold text-zinc-900 group-hover:text-emerald-600 transition-colors flex items-center gap-2">
-                  {instance.isCustom && <Plus size={14} className="text-yellow-600" />}
+                <h2 className="text-lg font-bold text-emerald-50 group-hover:text-yellow-400 transition-colors flex items-center gap-2">
+                  {instance.isCustom && <Plus size={14} className="text-yellow-500" />}
                   {instance.event.name}
                 </h2>
               </div>
 
-              <p className="text-sm text-zinc-500 line-clamp-2 mb-4 leading-relaxed">
+              <p className="text-sm text-emerald-100/60 line-clamp-2 mb-4 leading-relaxed">
                 {instance.event.description}
               </p>
 
               <div className="space-y-3">
                 <div className="flex flex-wrap gap-1.5">
                   {instance.event.prizes.slice(0, 3).map((prize, i) => (
-                    <span key={i} className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-1 rounded-md border border-emerald-100">
+                    <span key={i} className="text-[10px] bg-emerald-900/60 text-emerald-300 px-2 py-1 rounded-md border border-emerald-500/20">
                       {prize}
                     </span>
                   ))}
                   {instance.event.prizes.length > 3 && (
-                    <span className="text-[10px] text-zinc-400 px-1 py-1">
+                    <span className="text-[10px] text-emerald-600 px-1 py-1">
                       +{instance.event.prizes.length - 3} mais
                     </span>
                   )}
                 </div>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-emerald-50 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold text-zinc-400">
+              <div className="mt-6 pt-4 border-t border-emerald-500/10 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold text-emerald-700">
                   <span>{instance.event.category}</span>
                   {instance.isCustom && <span className="text-yellow-600 font-black">• STAFF</span>}
                 </div>
@@ -505,15 +514,15 @@ export default function App() {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="relative w-full max-w-md bg-white border border-emerald-100 rounded-3xl p-8 shadow-2xl"
+              className="relative w-full max-w-md bg-emerald-950/80 backdrop-blur-2xl border border-emerald-500/30 rounded-3xl p-8 shadow-2xl"
             >
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-black text-zinc-900 flex items-center gap-3">
-                  <Plus className="text-yellow-600" /> Criar Evento Staff
+                <h2 className="text-2xl font-black text-white flex items-center gap-3">
+                  <Plus className="text-yellow-500" /> Criar Evento Staff
                 </h2>
                 <button 
                   onClick={() => setIsStaffPanelOpen(false)}
-                  className="p-2 text-zinc-400 hover:text-zinc-900 transition-colors"
+                  className="p-2 text-emerald-500 hover:text-white transition-colors"
                 >
                   <X size={24} />
                 </button>
@@ -521,34 +530,34 @@ export default function App() {
 
               <form onSubmit={handleAddEvent} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1.5">Título do Evento</label>
+                  <label className="block text-xs font-bold text-emerald-500 uppercase tracking-wider mb-1.5">Título do Evento</label>
                   <input 
                     required
                     type="text" 
                     value={formTitle}
                     onChange={(e) => setFormTitle(e.target.value)}
                     placeholder="Ex: Invasão de Natal"
-                    className="w-full bg-zinc-50 border border-emerald-100 rounded-xl px-4 py-3 text-zinc-900 placeholder:text-zinc-300 focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full bg-emerald-900/50 border border-emerald-500/20 rounded-xl px-4 py-3 text-white placeholder:text-emerald-800 focus:outline-none focus:border-yellow-500 transition-colors"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1.5">Horário</label>
+                    <label className="block text-xs font-bold text-emerald-500 uppercase tracking-wider mb-1.5">Horário</label>
                     <input 
                       required
                       type="time" 
                       value={formTime}
                       onChange={(e) => setFormTime(e.target.value)}
-                      className="w-full bg-zinc-50 border border-emerald-100 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:border-emerald-500 transition-colors"
+                      className="w-full bg-emerald-900/50 border border-emerald-500/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 transition-colors"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1.5">Categoria</label>
+                    <label className="block text-xs font-bold text-emerald-500 uppercase tracking-wider mb-1.5">Categoria</label>
                     <select 
                       value={formCategory}
                       onChange={(e) => setFormCategory(e.target.value as ROEvent['category'])}
-                      className="w-full bg-zinc-50 border border-emerald-100 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:border-emerald-500 transition-colors appearance-none"
+                      className="w-full bg-emerald-900/50 border border-emerald-500/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 transition-colors appearance-none"
                     >
                       <option value="MvP">MvP</option>
                       <option value="PvP">PvP</option>
@@ -559,24 +568,24 @@ export default function App() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1.5">Premiação (separada por vírgula)</label>
+                  <label className="block text-xs font-bold text-emerald-500 uppercase tracking-wider mb-1.5">Premiação (separada por vírgula)</label>
                   <input 
                     type="text" 
                     value={formPrize}
                     onChange={(e) => setFormPrize(e.target.value)}
                     placeholder="Ex: 1x Galho Sangrento, 5x Moedas"
-                    className="w-full bg-zinc-50 border border-emerald-100 rounded-xl px-4 py-3 text-zinc-900 placeholder:text-zinc-300 focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full bg-emerald-900/50 border border-emerald-500/20 rounded-xl px-4 py-3 text-white placeholder:text-emerald-800 focus:outline-none focus:border-yellow-500 transition-colors"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1.5">Descrição</label>
+                  <label className="block text-xs font-bold text-emerald-500 uppercase tracking-wider mb-1.5">Descrição</label>
                   <textarea 
                     value={formDesc}
                     onChange={(e) => setFormDesc(e.target.value)}
                     placeholder="O que os jogadores devem fazer?"
                     rows={3}
-                    className="w-full bg-zinc-50 border border-emerald-100 rounded-xl px-4 py-3 text-zinc-900 placeholder:text-zinc-300 focus:outline-none focus:border-emerald-500 transition-colors resize-none"
+                    className="w-full bg-emerald-900/50 border border-emerald-500/20 rounded-xl px-4 py-3 text-white placeholder:text-emerald-800 focus:outline-none focus:border-yellow-500 transition-colors resize-none"
                   />
                 </div>
 
@@ -594,27 +603,35 @@ export default function App() {
       </AnimatePresence>
 
       {/* Footer Info */}
-      <footer className="max-w-6xl mx-auto px-6 py-12 border-t border-emerald-100 mt-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-sm text-zinc-500">
+      <footer className="max-w-6xl mx-auto px-6 py-12 border-t border-emerald-500/5 mt-12 bg-emerald-950/5 backdrop-blur-[1px] rounded-t-3xl">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-sm text-emerald-100/30">
           <div>
-            <h4 className="text-emerald-600 font-bold mb-3 uppercase tracking-wider text-xs">Sobre o App</h4>
+            <h4 className="text-emerald-400 font-bold mb-3 uppercase tracking-wider text-xs">Sobre o App</h4>
             <p>Sincronizado com o horário do servidor. Alertas automáticos 2 minutos antes de cada evento para você não perder nenhum drop da sorte.</p>
           </div>
           <div>
-            <h4 className="text-emerald-600 font-bold mb-3 uppercase tracking-wider text-xs">Legenda da Sorte</h4>
+            <h4 className="text-emerald-400 font-bold mb-3 uppercase tracking-wider text-xs">Legenda da Sorte</h4>
             <ul className="space-y-2">
-              <li className="flex items-center gap-2"><Sword size={14} className="text-red-500" /> MvP - Chefes de Mundo</li>
-              <li className="flex items-center gap-2"><Trophy size={14} className="text-yellow-600" /> PvP - Batalhas entre jogadores</li>
-              <li className="flex items-center gap-2"><Gamepad2 size={14} className="text-blue-500" /> Minigames - Diversão e sorte</li>
-              <li className="flex items-center gap-2"><Clover size={14} className="text-emerald-600" /> Leprechaun - Eventos Especiais</li>
+              <li className="flex items-center gap-2"><Sword size={14} className="text-red-400" /> MvP - Chefes de Mundo</li>
+              <li className="flex items-center gap-2"><Trophy size={14} className="text-yellow-400" /> PvP - Batalhas entre jogadores</li>
+              <li className="flex items-center gap-2"><Gamepad2 size={14} className="text-blue-400" /> Minigames - Diversão e sorte</li>
+              <li className="flex items-center gap-2">
+                <img 
+                  src="https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png" 
+                  alt="Leprechaun Icon" 
+                  className="w-4 h-4 object-contain"
+                  referrerPolicy="no-referrer"
+                /> 
+                Leprechaun - Eventos Especiais
+              </li>
             </ul>
           </div>
           <div>
-            <h4 className="text-emerald-600 font-bold mb-3 uppercase tracking-wider text-xs">Configurações</h4>
+            <h4 className="text-emerald-400 font-bold mb-3 uppercase tracking-wider text-xs">Configurações</h4>
             <p>Ative as notificações do navegador para receber alertas mesmo com a aba em segundo plano. Que a sorte esteja com você!</p>
           </div>
         </div>
-        <div className="mt-12 pt-8 border-t border-emerald-50 text-center text-xs text-zinc-400">
+        <div className="mt-12 pt-8 border-t border-emerald-500/10 text-center text-xs text-emerald-700">
           &copy; 2026 Ragnarok Event Tracker - Leprechaun Sorte Edition.
         </div>
       </footer>
