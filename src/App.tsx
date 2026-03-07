@@ -30,19 +30,64 @@ const minutesToTime = (totalMinutes: number) => {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 };
 
+// Helper to play a notification sound (Bell-like)
+const playNotificationSound = () => {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    
+    const audioContext = new AudioContextClass();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    // Create a "ding" sound with harmonics for a bell-like effect
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(880, audioContext.currentTime); 
+    oscillator.frequency.exponentialRampToValueAtTime(440, audioContext.currentTime + 0.5); 
+
+    const oscillator2 = audioContext.createOscillator();
+    oscillator2.connect(gainNode);
+    oscillator2.type = 'sine';
+    oscillator2.frequency.setValueAtTime(1760, audioContext.currentTime); 
+    oscillator2.frequency.exponentialRampToValueAtTime(880, audioContext.currentTime + 0.5); 
+
+    gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
+
+    oscillator.start();
+    oscillator2.start();
+    oscillator.stop(audioContext.currentTime + 0.5);
+    oscillator2.stop(audioContext.currentTime + 0.5);
+  } catch (e) {
+    console.warn('Não foi possível tocar o som de notificação:', e);
+  }
+};
+
 export default function App() {
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
-  const [notificationSettings, setNotificationSettings] = useState<Record<string, boolean>>({
-    MvP: true,
-    PvP: true,
-    Minigame: true,
-    Special: true,
-    Galhos: true,
-    Arca: true
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
+    const saved = localStorage.getItem('omega_notif_enabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  const [notificationSettings, setNotificationSettings] = useState<Record<string, boolean>>(() => {
+    const saved = localStorage.getItem('omega_notif_settings');
+    return saved ? JSON.parse(saved) : {
+      MvP: true,
+      PvP: true,
+      Minigame: true,
+      Special: true,
+      Galhos: true,
+      Arca: true
+    };
   });
   const [isNotifMenuOpen, setIsNotifMenuOpen] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    const saved = localStorage.getItem('omega_sound_enabled');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [activeAlerts, setActiveAlerts] = useState<string[]>([]);
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
@@ -65,6 +110,13 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('omega_custom_events', JSON.stringify(customEvents));
   }, [customEvents]);
+
+  // Save notification settings to localStorage
+  useEffect(() => {
+    localStorage.setItem('omega_notif_enabled', JSON.stringify(notificationsEnabled));
+    localStorage.setItem('omega_notif_settings', JSON.stringify(notificationSettings));
+    localStorage.setItem('omega_sound_enabled', JSON.stringify(soundEnabled));
+  }, [notificationsEnabled, notificationSettings, soundEnabled]);
 
   // Update clock every second
   useEffect(() => {
@@ -126,6 +178,7 @@ export default function App() {
     });
 
     if (newAlerts.length > activeAlerts.length && soundEnabled && notificationsEnabled) {
+      playNotificationSound();
       console.log('ALERTA: Evento em 2 minutos!');
     }
     
@@ -230,7 +283,14 @@ export default function App() {
                           </label>
                         ))}
                       </div>
-                      <div className="mt-3 pt-3 border-t border-zinc-800">
+                      <div className="mt-3 pt-3 border-t border-zinc-800 space-y-2">
+                        <button 
+                          onClick={() => playNotificationSound()}
+                          className="w-full flex items-center justify-between p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white transition-all"
+                        >
+                          <span className="text-[10px] font-black uppercase tracking-wider">Testar Som</span>
+                          <Volume2 size={14} />
+                        </button>
                         <button 
                           onClick={() => setNotificationsEnabled(!notificationsEnabled)}
                           className={`w-full flex items-center justify-between p-2 rounded-lg transition-all ${
