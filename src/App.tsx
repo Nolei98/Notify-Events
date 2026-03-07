@@ -36,8 +36,8 @@ const minutesToTime = (totalMinutes: number) => {
 // Helper to play a notification sound
 const playNotificationSound = async () => {
   try {
-    // Direct link to the MyInstants sound provided by the user
-    const soundUrl = 'https://www.myinstants.com/media/sounds/world-series-nations-cup.mp3';
+    // Direct link to the Flauta Doce sound provided by the user
+    const soundUrl = 'https://www.myinstants.com/media/sounds/flauta-doce-effect.mp3';
     const audio = new Audio(soundUrl);
     
     audio.volume = 0.6;
@@ -57,6 +57,44 @@ const playNotificationSound = async () => {
   } catch (e) {
     console.warn('Não foi possível tocar o som de notificação:', e);
   }
+};
+
+// Glitter Effect Component for selected filters
+const GlitterEffect = () => {
+  return (
+    <div className="absolute inset-0 pointer-events-none z-0">
+      {[...Array(12)].map((_, i) => (
+        <motion.div
+          key={i}
+          className="absolute w-1 h-1 bg-yellow-200 rounded-full"
+          initial={{ 
+            opacity: 0, 
+            scale: 0,
+            x: (Math.random() - 0.5) * 20,
+            y: 0
+          }}
+          animate={{ 
+            opacity: [0, 1, 0.8, 0], 
+            scale: [0, 1.5, 1, 0],
+            y: [-20, -40, -70],
+            x: (Math.random() - 0.5) * 80,
+            rotate: [0, 180, 360]
+          }}
+          transition={{ 
+            duration: 2 + Math.random(), 
+            repeat: Infinity, 
+            delay: Math.random() * 2,
+            ease: "easeOut"
+          }}
+          style={{
+            left: "50%",
+            top: "50%",
+            boxShadow: '0 0 10px 2px rgba(253, 224, 71, 0.9)',
+          }}
+        />
+      ))}
+    </div>
+  );
 };
 
 export default function App() {
@@ -279,7 +317,7 @@ export default function App() {
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         {/* Main Background GIF */}
         <img 
-          src="https://i.pinimg.com/originals/12/a9/b5/12a9b50719fbdef8ae7a18f9bb883963.gif" 
+          src="https://i.pinimg.com/originals/7e/7a/8b/7e7a8bf3cfd1db0296073a856ae01776.gif" 
           alt="Background" 
           className="w-full h-full object-cover opacity-95"
           referrerPolicy="no-referrer"
@@ -419,13 +457,14 @@ export default function App() {
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all backdrop-blur-md border ${
+              className={`relative px-4 py-1.5 rounded-full text-sm font-bold transition-all backdrop-blur-md border ${
                 selectedCategory === cat 
                 ? 'bg-gradient-to-r from-emerald-500 to-yellow-500 text-white shadow-md shadow-emerald-500/20 border-emerald-400' 
                 : 'bg-emerald-950/70 text-emerald-400 border-emerald-500/30 hover:bg-emerald-900/80 hover:text-white'
               }`}
             >
-              {cat}
+              {selectedCategory === cat && <GlitterEffect />}
+              <span className="relative z-10">{cat}</span>
             </button>
           ))}
         </div>
@@ -673,7 +712,7 @@ export default function App() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
-            className="fixed bottom-28 right-8 z-[100] flex flex-col gap-5 items-end pointer-events-none"
+            className="hidden md:flex fixed bottom-28 right-8 z-[100] flex-col gap-5 items-end pointer-events-none"
           >
             {/* Active Alerts (Toasts) */}
             <div className="flex flex-col gap-3 w-full max-w-[320px] pointer-events-auto">
