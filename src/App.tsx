@@ -339,7 +339,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-xl md:text-2xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-yellow-400 to-emerald-400 bg-clip-text text-transparent">
-                Notify Events OmegaRO - Leprechaun Edition
+                Leprechaun Village
               </h1>
               <p className="text-xs text-emerald-400/70 font-mono flex flex-wrap items-center justify-center md:justify-start gap-2">
                 <span className="flex items-center gap-2">
@@ -478,10 +478,15 @@ export default function App() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.05 }}
-              className={`group relative bg-white/10 backdrop-blur-[2px] border border-white/20 rounded-2xl p-5 hover:border-yellow-500/40 hover:bg-white/20 transition-all ${
+              className={`group relative bg-white/10 backdrop-blur-[2px] border border-white/20 rounded-2xl p-5 hover:border-yellow-500/40 hover:bg-white/20 transition-all overflow-hidden ${
                 instance.diff <= 10 ? 'ring-2 ring-emerald-500/30' : ''
               }`}
             >
+              {/* Shine effect on hover */}
+              <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+                <div className="absolute -inset-[100%] w-[200%] h-[200%] bg-gradient-to-r from-transparent via-white/20 to-transparent -rotate-45 translate-x-[-150%] group-hover:translate-x-[150%] transition-transform duration-1000 ease-in-out" />
+              </div>
+
               {/* Gold top border on hover */}
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-yellow-500 to-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity rounded-t-2xl" />
               
@@ -497,7 +502,9 @@ export default function App() {
 
               {/* Category Badge */}
               <div className="absolute top-5 right-5">
-                <div className="p-[3px] bg-emerald-950/90 backdrop-blur-md rounded-full border border-emerald-500/40 shadow-xl flex items-center justify-center">
+                <div className={`p-[3px] bg-emerald-950/90 backdrop-blur-md rounded-full border border-emerald-500/40 shadow-xl flex items-center justify-center ${
+                  (instance.event.category === 'Minigame' || instance.event.category === 'Special') ? 'animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.4)]' : ''
+                }`}>
                   {instance.event.category === 'MvP' && <Sword className="w-4 h-4 text-red-500" />}
                   {instance.event.category === 'PvP' && <Trophy className="w-4 h-4 text-yellow-600" />}
                   {instance.event.category === 'Minigame' && <Gamepad2 className="w-4 h-4 text-blue-500" />}
@@ -547,7 +554,7 @@ export default function App() {
 
               <div className="mt-6 pt-4 border-t border-emerald-500/10 flex items-center justify-center md:justify-between">
                 <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest font-black">
-                  <span className="bg-gradient-to-r from-emerald-400 via-yellow-400 to-emerald-400 bg-clip-text text-transparent underline underline-offset-4 decoration-emerald-400/40">
+                  <span className="bg-gradient-to-r from-emerald-400 via-yellow-400 to-emerald-400 bg-clip-text text-transparent underline underline-offset-4 decoration-emerald-400/40 animate-shimmer">
                     {instance.event.category}
                   </span>
                   {instance.isCustom && <span className="text-yellow-600 font-black">• STAFF</span>}
