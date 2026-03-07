@@ -33,12 +33,18 @@ const minutesToTime = (totalMinutes: number) => {
 };
 
 // Helper to play a notification sound (Bell-like)
-const playNotificationSound = () => {
+const playNotificationSound = async () => {
   try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContextClass) return;
     
     const audioContext = new AudioContextClass();
+    
+    // Resume context if suspended (browser policy)
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume();
+    }
+
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
 
@@ -63,6 +69,11 @@ const playNotificationSound = () => {
     oscillator2.start();
     oscillator.stop(audioContext.currentTime + 0.5);
     oscillator2.stop(audioContext.currentTime + 0.5);
+    
+    // Close context after sound finishes to save resources
+    setTimeout(() => {
+      audioContext.close();
+    }, 1000);
   } catch (e) {
     console.warn('Não foi possível tocar o som de notificação:', e);
   }
@@ -94,6 +105,7 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [activeAlerts, setActiveAlerts] = useState<string[]>([]);
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
+  const [notifiedAlerts, setNotifiedAlerts] = useState<Set<string>>(new Set());
   
   // Staff Panel State
   const [isStaffPanelOpen, setIsStaffPanelOpen] = useState(false);
@@ -160,6 +172,8 @@ export default function App() {
   // Check for alerts (2 minutes before)
   useEffect(() => {
     const newAlerts: string[] = [];
+    const alertsToPlaySound: string[] = [];
+
     processedEvents.forEach(instance => {
       const alertId = `${instance.event.id}-${instance.time}`;
       
@@ -178,16 +192,45 @@ export default function App() {
       // Alert if exactly 2 minutes or 1 minute before, not dismissed, and enabled
       if (instance.diff <= 2 && instance.diff > 0 && !dismissedAlerts.has(alertId) && shouldNotify) {
         newAlerts.push(alertId);
+        
+        // If not already notified for this specific event instance, mark for sound
+        if (!notifiedAlerts.has(alertId)) {
+          alertsToPlaySound.push(alertId);
+        }
       }
     });
 
-    if (newAlerts.length > activeAlerts.length && soundEnabled && notificationsEnabled) {
+    // Play sound if there are new alerts to notify
+    if (alertsToPlaySound.length > 0 && soundEnabled && notificationsEnabled) {
       playNotificationSound();
-      console.log('ALERTA: Evento em 2 minutos!');
+      setNotifiedAlerts(prev => {
+        const next = new Set(prev);
+        alertsToPlaySound.forEach(id => next.add(id));
+        return next;
+      });
+      console.log('ALERTA SONORO: Novos eventos detectados!');
     }
     
+    // Update active alerts for visual display
     setActiveAlerts(newAlerts);
-  }, [processedEvents, dismissedAlerts, soundEnabled, notificationSettings, notificationsEnabled]);
+
+    // Cleanup notifiedAlerts for events that are now in the past
+    if (currentTime.getSeconds() === 0) { // Clean up once a minute
+      setNotifiedAlerts(prev => {
+        const next = new Set(prev);
+        let changed = false;
+        prev.forEach(id => {
+          const [eventId, time] = id.split('-');
+          const eventInstance = processedEvents.find(pi => pi.event.id === eventId && pi.time === time);
+          if (!eventInstance || eventInstance.diff <= 0) {
+            next.delete(id);
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+    }
+  }, [processedEvents, dismissedAlerts, soundEnabled, notificationSettings, notificationsEnabled, notifiedAlerts, currentTime]);
 
   const categories = ['All', 'MvP', 'PvP', 'Minigame', 'Special', 'Premiação: Galhos', 'Premiação: Arca'];
 
