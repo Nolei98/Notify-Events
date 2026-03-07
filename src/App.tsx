@@ -307,8 +307,8 @@ export default function App() {
 
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white/10 backdrop-blur-[2px] border-b border-white/20 px-6 py-4">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+        <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex flex-col items-center text-center md:flex-row md:text-left md:items-center gap-3">
             <div className="p-1.5 bg-gradient-to-br from-emerald-500 to-yellow-500 rounded-full shadow-lg shadow-emerald-500/30">
               <img 
                 src="https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png" 
@@ -318,13 +318,15 @@ export default function App() {
               />
             </div>
             <div>
-              <h1 className="text-xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-yellow-400 to-emerald-400 bg-clip-text text-transparent">
+              <h1 className="text-xl md:text-2xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-yellow-400 to-emerald-400 bg-clip-text text-transparent">
                 Notify Events OmegaRO - Leprechaun Edition
               </h1>
-              <p className="text-xs text-emerald-400/70 font-mono flex items-center gap-2">
-                <Coins size={12} className="text-yellow-500" />
-                SERVER TIME: {currentTime.toLocaleTimeString()}
-                <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter flex items-center gap-1 ${
+              <p className="text-xs text-emerald-400/70 font-mono flex flex-wrap items-center justify-center md:justify-start gap-2">
+                <span className="flex items-center gap-2">
+                  <Coins size={12} className="text-yellow-500" />
+                  SERVER TIME: {currentTime.toLocaleTimeString()}
+                </span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter flex items-center gap-1 ${
                   notificationsEnabled && soundEnabled 
                   ? 'bg-emerald-500/20 text-emerald-400 animate-pulse' 
                   : 'bg-red-500/20 text-red-400'
@@ -336,7 +338,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center md:justify-end gap-3">
             <div className="relative">
               <button 
                 onClick={() => setIsNotifMenuOpen(!isNotifMenuOpen)}
@@ -528,7 +530,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="mb-4">
+              <div className="mb-4 flex flex-col items-center text-center md:items-start md:text-left">
                 <div className="flex items-baseline gap-2 mb-1">
                   <span className="text-3xl font-black font-mono bg-gradient-to-br from-white to-emerald-400 bg-clip-text text-transparent tracking-tighter">
                     {instance.time}
@@ -539,7 +541,7 @@ export default function App() {
                     {instance.diff <= 0 ? 'AGORA' : `em ${Math.floor(instance.diff)}m`}
                   </span>
                 </div>
-                <h2 className="text-lg font-bold text-emerald-50 group-hover:text-yellow-400 transition-colors flex items-center gap-2">
+                <h2 className="text-lg font-bold text-emerald-50 group-hover:text-yellow-400 transition-colors flex items-center justify-center md:justify-start gap-2">
                   {instance.isCustom && (
                     <span className="p-1 bg-yellow-500/20 rounded-full border border-yellow-500/30">
                       <Plus size={12} className="text-yellow-500" />
@@ -549,12 +551,12 @@ export default function App() {
                 </h2>
               </div>
 
-              <p className="text-sm text-emerald-100/60 line-clamp-2 mb-4 leading-relaxed">
+              <p className="text-sm text-emerald-100/60 line-clamp-2 mb-4 leading-relaxed text-center md:text-left">
                 {instance.event.description}
               </p>
 
-              <div className="space-y-3">
-                <div className="flex flex-wrap gap-1.5">
+              <div className="space-y-3 flex flex-col items-center md:items-start">
+                <div className="flex flex-wrap justify-center md:justify-start gap-1.5">
                   {instance.event.prizes.slice(0, 3).map((prize, i) => (
                     <span key={i} className="text-[10px] bg-emerald-900/60 text-emerald-300 px-2 py-1 rounded-md border border-emerald-500/20">
                       {prize}
@@ -568,7 +570,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-emerald-500/10 flex items-center justify-between">
+              <div className="mt-6 pt-4 border-t border-emerald-500/10 flex items-center justify-center md:justify-between">
                 <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest font-bold text-emerald-700">
                   <span>{instance.event.category}</span>
                   {instance.isCustom && <span className="text-yellow-600 font-black">• STAFF</span>}
@@ -684,35 +686,45 @@ export default function App() {
 
       {/* Footer Info */}
       <footer className="max-w-6xl mx-auto px-6 py-12 border-t border-emerald-500/30 mt-12 bg-emerald-950/70 backdrop-blur-md rounded-t-3xl">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-sm text-emerald-50/80">
-          <div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-10 text-sm text-emerald-50/80 text-center md:text-left">
+          <div className="flex flex-col items-center md:items-start">
             <h4 className="text-emerald-400 font-bold mb-3 uppercase tracking-wider text-xs">Sobre o App</h4>
-            <p className="leading-relaxed">Sincronizado com o horário do servidor. Alertas automáticos 2 minutos antes de cada evento para você não perder nenhum drop da sorte.</p>
+            <p className="leading-relaxed max-w-xs md:max-w-none">Sincronizado com o horário do servidor. Alertas automáticos 2 minutos antes de cada evento para você não perder nenhum drop da sorte.</p>
           </div>
-          <div>
+          <div className="flex flex-col items-center md:items-start">
             <h4 className="text-emerald-400 font-bold mb-3 uppercase tracking-wider text-xs">Legenda da Sorte</h4>
-            <ul className="space-y-2">
-              <li className="flex items-center gap-2"><Sword size={14} className="text-red-400" /> <span className="text-emerald-100">MvP - Chefes de Mundo</span></li>
-              <li className="flex items-center gap-2"><Trophy size={14} className="text-yellow-400" /> <span className="text-emerald-100">PvP - Batalhas entre jogadores</span></li>
-              <li className="flex items-center gap-2"><Gamepad2 size={14} className="text-blue-400" /> <span className="text-emerald-100">Minigames - Diversão e sorte</span></li>
-              <li className="flex items-center gap-2">
+            <ul className="space-y-3">
+              <li className="flex items-center justify-center md:justify-start gap-2">
+                <Sword size={14} className="text-red-400" /> 
+                <span className="text-red-400 font-bold underline underline-offset-4 decoration-red-400/30">MvP - Chefes de Mundo</span>
+              </li>
+              <li className="flex items-center justify-center md:justify-start gap-2">
+                <Trophy size={14} className="text-yellow-400" /> 
+                <span className="text-yellow-400 font-bold underline underline-offset-4 decoration-yellow-400/30">PvP - Batalhas entre jogadores</span>
+              </li>
+              <li className="flex items-center justify-center md:justify-start gap-2">
+                <Gamepad2 size={14} className="text-blue-400" /> 
+                <span className="text-blue-400 font-bold underline underline-offset-4 decoration-blue-400/30">Minigames - Diversão e sorte</span>
+              </li>
+              <li className="flex items-center justify-center md:justify-start gap-2">
                 <img 
                   src="https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png" 
                   alt="Leprechaun Icon" 
                   className="w-4 h-4 object-contain"
                   referrerPolicy="no-referrer"
                 /> 
-                <span className="text-emerald-100">Leprechaun - Eventos Especiais</span>
+                <span className="text-emerald-400 font-bold underline underline-offset-4 decoration-emerald-400/30">Leprechaun - Eventos Especiais</span>
               </li>
             </ul>
           </div>
-          <div>
+          <div className="flex flex-col items-center md:items-start">
             <h4 className="text-emerald-400 font-bold mb-3 uppercase tracking-wider text-xs">Configurações</h4>
-            <p className="leading-relaxed">Ative as notificações do navegador para receber alertas mesmo com a aba em segundo plano. Que a sorte esteja com você!</p>
+            <p className="leading-relaxed max-w-xs md:max-w-none">Ative as notificações do navegador para receber alertas mesmo com a aba em segundo plano. Que a sorte esteja com você!</p>
           </div>
         </div>
-        <div className="mt-12 pt-8 border-t border-emerald-500/20 text-center text-xs text-emerald-400 font-medium">
-          &copy; 2026 Ragnarok Event Tracker - Leprechaun Sorte Edition.
+        <div className="mt-12 pt-8 border-t border-emerald-500/20 text-center text-xs text-emerald-400 font-medium space-y-2">
+          <p>&copy; 2026 Ragnarok Event Tracker - Leprechaun Sorte Edition.</p>
+          <p className="text-emerald-500/60 tracking-widest uppercase text-[10px]">Desenvolvido por <span className="text-emerald-400 font-black">Nolei creative</span></p>
         </div>
       </footer>
 
