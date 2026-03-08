@@ -50,10 +50,12 @@ const playNotificationSound = async () => {
     }
 
     // Stop after 5 seconds as requested
+    /* 
     setTimeout(() => {
       audio.pause();
       audio.currentTime = 0;
     }, 5000);
+    */
   } catch (e) {
     console.warn('Não foi possível tocar o som de notificação:', e);
   }
@@ -326,7 +328,7 @@ export default function App() {
       </div>
 
       {/* Header */}
-      <header className="z-50 bg-white/10 backdrop-blur-[2px] border-b border-white/20 px-6 py-4">
+      <header className="relative z-[150] bg-white/10 backdrop-blur-[2px] border-b border-white/20 px-6 py-4">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex flex-col items-center text-center md:flex-row md:text-left md:items-center gap-3">
             <div className="p-1.5 bg-gradient-to-br from-emerald-500 to-yellow-500 rounded-full shadow-lg shadow-emerald-500/30">
@@ -376,7 +378,7 @@ export default function App() {
                       initial={{ opacity: 0, y: 10, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                      className="absolute right-0 mt-2 w-64 bg-emerald-950/80 backdrop-blur-2xl border border-emerald-500/30 rounded-2xl p-4 shadow-2xl z-50"
+                      className="absolute right-0 mt-2 w-64 bg-emerald-950/80 backdrop-blur-2xl border border-emerald-500/30 rounded-2xl p-4 shadow-2xl z-[200]"
                     >
                       <h3 className="text-xs font-black text-emerald-400 uppercase tracking-widest mb-3 px-1 flex items-center gap-2">
                         <Zap size={12} /> Notificar Categorias
@@ -484,7 +486,7 @@ export default function App() {
             >
               {/* Shine effect on hover */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
-                <div className="absolute -inset-[100%] w-[200%] h-[200%] bg-gradient-to-r from-transparent via-white/20 to-transparent -rotate-45 translate-x-[-150%] group-hover:translate-x-[150%] transition-transform duration-1000 ease-in-out" />
+                <div className="absolute -inset-[100%] w-[200%] h-[200%] bg-gradient-to-r from-transparent via-white/20 to-transparent -rotate-45 translate-x-[-150%] group-hover:animate-shine-once" />
               </div>
 
               {/* Gold top border on hover */}
@@ -782,7 +784,7 @@ export default function App() {
                         initial={{ opacity: 0, y: 10, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                        className="absolute bottom-full right-0 mb-4 w-64 bg-emerald-950/90 backdrop-blur-2xl border border-emerald-500/30 rounded-2xl p-4 shadow-2xl z-50"
+                        className="absolute bottom-full right-0 mb-4 w-64 bg-emerald-950/90 backdrop-blur-2xl border border-emerald-500/30 rounded-2xl p-4 shadow-2xl z-[200]"
                       >
                         <h3 className="text-xs font-black text-emerald-400 uppercase tracking-widest mb-3 px-1 flex items-center gap-2">
                           <Zap size={12} /> Notificar Categorias

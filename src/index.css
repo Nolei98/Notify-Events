@@ -21,6 +21,13 @@
     background-size: 200% auto;
     animation: shimmer 3s linear infinite;
   }
+  @keyframes shine-sweep {
+    0% { transform: translateX(-150%) rotate(-45deg); }
+    100% { transform: translateX(150%) rotate(-45deg); }
+  }
+  .animate-shine-once {
+    animation: shine-sweep 1s ease-in-out forwards;
+  }
 }
 
 /* Custom scrollbar */
