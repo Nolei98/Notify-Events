@@ -33,7 +33,8 @@ import {
   Flame,
   Layout,
   BookOpen,
-  Activity
+  Activity,
+  Footprints
 } from 'lucide-react';
 import { RAGNAROK_EVENTS, ROEvent } from './constants';
 
@@ -69,6 +70,7 @@ export interface ClassBuild {
     capa: BuildEquipment;
     armadura: BuildEquipment;
     escudo: BuildEquipment;
+    bota: BuildEquipment;
     acessorio1: BuildEquipment;
     acessorio2: BuildEquipment;
   };
@@ -213,6 +215,7 @@ export default function App() {
   const [isRosterOpen, setIsRosterOpen] = useState(false);
   const [roster, setRoster] = useState<RosterMember[]>([]);
   const [woeSchedule, setWoeSchedule] = useState<WoESchedule>({ days: ['Terça', 'Quinta', 'Sábado'], startTime: '20:00', endTime: '21:00' });
+  const [classTypes, setClassTypes] = useState<string[]>(['Paladin', 'Professor', 'Clown', 'High Wizard', 'Creator', 'Sniper', 'Stalker', 'Champion']);
   const [dataLoaded, setDataLoaded] = useState(false);
 
   // Fetch initial data from server
@@ -224,6 +227,9 @@ export default function App() {
           const data = await response.json();
           setRoster(data.roster || []);
           setWoeSchedule(data.woeSchedule || { days: ['Terça', 'Quinta', 'Sábado'], startTime: '20:00', endTime: '21:00' });
+          if (data.classTypes && data.classTypes.length > 0) {
+            setClassTypes(data.classTypes);
+          }
           setDataLoaded(true);
         }
       } catch (error) {
@@ -242,7 +248,7 @@ export default function App() {
         await fetch('/api/data', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ roster, woeSchedule })
+          body: JSON.stringify({ roster, woeSchedule, classTypes })
         });
       } catch (error) {
         console.error("Failed to save shared data:", error);
@@ -251,7 +257,7 @@ export default function App() {
     
     const timer = setTimeout(saveData, 500); // Debounce saves
     return () => clearTimeout(timer);
-  }, [roster, woeSchedule, dataLoaded]);
+  }, [roster, woeSchedule, classTypes, dataLoaded]);
 
   // Admin Form for Roster
   const [isRosterAdminOpen, setIsRosterAdminOpen] = useState(false);
@@ -280,6 +286,7 @@ export default function App() {
       capa: { name: '', cards: [], cardDescriptions: [], slots: 0, image: '' },
       armadura: { name: '', cards: [], cardDescriptions: [], slots: 0, image: '' },
       escudo: { name: '', cards: [], cardDescriptions: [], slots: 0, image: '' },
+      bota: { name: '', cards: [], cardDescriptions: [], slots: 0, image: '' },
       acessorio1: { name: '', cards: [], cardDescriptions: [], slots: 0, image: '' },
       acessorio2: { name: '', cards: [], cardDescriptions: [], slots: 0, image: '' },
     }
@@ -383,13 +390,16 @@ export default function App() {
     localStorage.removeItem('leprechaun_is_admin');
   };
 
+  const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+
   // Roster CRUD
   const addRosterMember = (e: React.FormEvent) => {
     e.preventDefault();
     if (!rosterFormClass) return;
     const newMember: RosterMember = {
       id: Date.now().toString(),
-      name: rosterFormName || '',
+      name: rosterFormName.trim() || '',
       className: rosterFormClass,
       confirmed: null
     };
@@ -402,6 +412,11 @@ export default function App() {
     setRoster(prev => prev.filter(m => m.id !== id));
   };
 
+  const updateRosterMemberName = (id: string, newName: string) => {
+    setRoster(prev => prev.map(m => m.id === id ? { ...m, name: newName } : m));
+    setEditingMemberId(null);
+  };
+
   const updateConfirmation = (id: string, status: boolean | null) => {
     setRoster(prev => prev.map(m => {
       if (m.id === id) {
@@ -410,6 +425,52 @@ export default function App() {
       return m;
     }));
   };
+
+  // Next War Logic
+  const nextWarInfo = useMemo(() => {
+    if (!woeSchedule.days.length) return null;
+    
+    const dayMap: Record<string, number> = {
+      'dom': 0, 'seg': 1, 'ter': 2, 'qua': 3, 'qui': 4, 'sex': 5, 'sáb': 6, 'sab': 6,
+      'domingo': 0, 'segunda': 1, 'terça': 2, 'quarta': 3, 'quinta': 4, 'sexta': 5, 'sábado': 6
+    };
+
+    const now = new Date();
+    const currentDay = now.getDay();
+    
+    const scheduledDayIndices = woeSchedule.days
+      .map(d => dayMap[d.toLowerCase().substring(0, 3)] ?? dayMap[d.toLowerCase()])
+      .filter(d => d !== undefined)
+      .sort((a, b) => a - b);
+
+    if (!scheduledDayIndices.length) return null;
+
+    // Find the next day index
+    let nextDayIndex = scheduledDayIndices.find(d => d >= currentDay);
+    let daysUntil = 0;
+
+    if (nextDayIndex === undefined) {
+      nextDayIndex = scheduledDayIndices[0];
+      daysUntil = (7 - currentDay) + nextDayIndex;
+    } else {
+      daysUntil = nextDayIndex - currentDay;
+    }
+
+    const nextDate = new Date(now);
+    nextDate.setDate(now.getDate() + daysUntil);
+    
+    const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+    return {
+      date: nextDate.toLocaleDateString('pt-BR'),
+      dayName: dayNames[nextDayIndex]
+    };
+  }, [woeSchedule.days]);
+
+  // Available classes from builds
+  const availableClasses = useMemo(() => {
+    const classes = new Set([...classTypes, ...builds.map(b => b.className)]);
+    return Array.from(classes).sort();
+  }, [builds, classTypes]);
 
   // Scroll to top logic
   useEffect(() => {
@@ -720,7 +781,7 @@ export default function App() {
             <div className="relative z-10 flex-1 flex flex-col md:flex-row overflow-hidden">
               {/* Sidebar: Class Selection */}
               <div className="w-full md:w-72 bg-zinc-900/30 border-r border-white/5 overflow-y-auto p-4 space-y-2">
-                {['Paladin', 'Professor', 'Clown', 'High Wizard', 'Creator', 'Sniper', 'Stalker', 'Champion'].map(cls => {
+                {classTypes.map(cls => {
                   const classBuilds = builds.filter(b => b.className === cls);
                   return (
                     <div key={cls} className="space-y-1">
@@ -761,37 +822,92 @@ export default function App() {
                         <Plus className="text-emerald-500" /> Cadastrar Nova Build
                       </h3>
                       <form onSubmit={handleAddBuild} className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="space-y-4">
-                          <div>
-                            <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Classe</label>
-                            <select 
-                              value={buildForm.className}
-                              onChange={e => setBuildForm({...buildForm, className: e.target.value})}
-                              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
-                            >
-                              {['Paladin', 'Professor', 'Clown', 'High Wizard', 'Creator', 'Sniper', 'Stalker', 'Champion'].map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
+                        <div className="space-y-6">
+                          <div className="space-y-4">
+                            <div>
+                              <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Classe</label>
+                              <select 
+                                value={buildForm.className}
+                                onChange={e => setBuildForm({...buildForm, className: e.target.value})}
+                                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
+                              >
+                                {classTypes.map(c => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Versão (ex: Song, Banshee)</label>
+                              <input 
+                                type="text"
+                                value={buildForm.version}
+                                onChange={e => setBuildForm({...buildForm, version: e.target.value})}
+                                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
+                                placeholder="Padrão"
+                              />
+                            </div>
                           </div>
-                          <div>
-                            <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Versão (ex: Song, Banshee)</label>
-                            <input 
-                              type="text"
-                              value={buildForm.version}
-                              onChange={e => setBuildForm({...buildForm, version: e.target.value})}
-                              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
-                              placeholder="Padrão"
-                            />
+
+                          {/* Class Type Management */}
+                          <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl space-y-3">
+                            <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Gerenciar Tipos de Classe</p>
+                            <div className="flex gap-2">
+                              <input 
+                                type="text"
+                                id="new-class-type"
+                                placeholder="Nova Classe"
+                                className="flex-1 bg-zinc-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    const val = (e.currentTarget as HTMLInputElement).value.trim();
+                                    if (val && !classTypes.includes(val)) {
+                                      setClassTypes([...classTypes, val]);
+                                      (e.currentTarget as HTMLInputElement).value = '';
+                                    }
+                                  }
+                                }}
+                              />
+                              <button 
+                                type="button"
+                                onClick={() => {
+                                  const input = document.getElementById('new-class-type') as HTMLInputElement;
+                                  const val = input.value.trim();
+                                  if (val && !classTypes.includes(val)) {
+                                    setClassTypes([...classTypes, val]);
+                                    input.value = '';
+                                  }
+                                }}
+                                className="px-3 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-400 transition-colors"
+                              >
+                                <Plus size={16} />
+                              </button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {classTypes.map(c => (
+                                <div key={c} className="flex items-center gap-1 bg-zinc-950 border border-white/5 px-2 py-1 rounded-md text-[10px] text-zinc-400">
+                                  {c}
+                                  <button 
+                                    type="button"
+                                    onClick={() => setClassTypes(classTypes.filter(t => t !== c))}
+                                    className="text-red-500 hover:text-red-400"
+                                  >
+                                    <X size={10} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                          <div>
-                            <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">URL da Imagem da Classe (Opcional)</label>
-                            <input 
-                              type="text"
-                              value={buildForm.image}
-                              onChange={e => setBuildForm({...buildForm, image: e.target.value})}
-                              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
-                              placeholder="https://exemplo.com/imagem.png"
-                            />
-                          </div>
+
+                          <div className="space-y-4">
+                            <div>
+                              <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">URL da Imagem da Classe (Opcional)</label>
+                              <input 
+                                type="text"
+                                value={buildForm.image}
+                                onChange={e => setBuildForm({...buildForm, image: e.target.value})}
+                                className="w-full bg-zinc-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
+                                placeholder="https://exemplo.com/imagem.png"
+                              />
+                            </div>
                           <div>
                             <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Descrição / Guia de Gameplay</label>
                             <div className="space-y-2">
@@ -827,11 +943,12 @@ export default function App() {
                             ))}
                           </div>
                         </div>
+                      </div>
 
-                        <div className="space-y-4">
+                      <div className="space-y-4">
                           <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Equipamentos & Cartas</label>
                           <div className="grid grid-cols-1 gap-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                            {['elmo', 'meio', 'baixo', 'arma', 'capa', 'armadura', 'escudo', 'acessorio1', 'acessorio2'].map(slot => {
+                            {['elmo', 'meio', 'baixo', 'arma', 'capa', 'armadura', 'escudo', 'bota', 'acessorio1', 'acessorio2'].map(slot => {
                               const slotData = buildForm.equipment?.[slot as keyof ClassBuild['equipment']];
                               const numSlots = slotData?.slots || 0;
                               return (
@@ -899,7 +1016,7 @@ export default function App() {
                                           <div key={i} className="space-y-1">
                                             <input 
                                               type="text"
-                                              placeholder={`Carta ${i + 1}`}
+                                              placeholder="Nome da carta"
                                               value={slotData?.cards[i] || ''}
                                               onChange={e => {
                                                 const newCards = [...(slotData?.cards || [])];
@@ -916,7 +1033,7 @@ export default function App() {
                                             />
                                             <input 
                                               type="text"
-                                              placeholder={`Descrição da Carta ${i + 1} (Opcional)`}
+                                              placeholder="Descrição da carta"
                                               value={slotData?.cardDescriptions?.[i] || ''}
                                               onChange={e => {
                                                 const newDescs = [...(slotData?.cardDescriptions || [])];
@@ -962,17 +1079,56 @@ export default function App() {
                     >
                       {/* Left: Class Image & Attributes */}
                       <div className="lg:col-span-5 space-y-8">
-                        <div className="relative group">
-                          <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-                          <img 
-                            src={selectedBuild.image} 
-                            alt={selectedBuild.className}
-                            className="w-full aspect-square object-contain relative z-10 drop-shadow-[0_20px_50px_rgba(16,185,129,0.3)]"
-                            referrerPolicy="no-referrer"
-                          />
-                          <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-zinc-950 to-transparent text-center">
-                            <h3 className="text-5xl font-black text-white tracking-tighter drop-shadow-lg">{selectedBuild.className}</h3>
-                            <p className="text-emerald-400 font-black uppercase tracking-[0.3em] text-xs mt-2 bg-emerald-500/10 py-1 px-3 rounded-full inline-block border border-emerald-500/20">{selectedBuild.version || 'Build Padrão'}</p>
+                        <div className="relative group flex flex-col items-center">
+                          {/* Decorative Frame Container */}
+                          <div className="relative w-full aspect-[16/10] flex items-center justify-center overflow-hidden">
+                            {/* Background Image (Pillars/Sun - Atrás) */}
+                            <div className="absolute inset-0 z-0 flex items-center justify-center p-6">
+                              <img 
+                                src="https://i.imgur.com/UMdIO75.png" 
+                                alt="Background Pillars" 
+                                className="w-full h-full object-contain pointer-events-none scale-100"
+                                referrerPolicy="no-referrer"
+                              />
+                            </div>
+                            
+                            {/* The Character Image (No meio) */}
+                            <div className="relative z-10 w-[35%] h-[45%] flex items-center justify-center mb-6">
+                              <img 
+                                src={selectedBuild.image} 
+                                alt={selectedBuild.className}
+                                className="max-w-full max-h-full object-contain"
+                                referrerPolicy="no-referrer"
+                              />
+                            </div>
+
+                            {/* Decorative Frame (Moldura - Na frente) */}
+                            <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center">
+                              <img 
+                                src="https://i.postimg.cc/vTb5cQtY/Sem-titulo-(3).png" 
+                                alt="Frame" 
+                                className="w-full h-full object-contain"
+                                referrerPolicy="no-referrer"
+                              />
+                            </div>
+
+                            {/* Name and Version Overlay (Ajustado à moldura) */}
+                            <div className="absolute bottom-[10%] left-0 right-0 z-40 flex flex-col items-center">
+                              <motion.div
+                                initial={{ y: 5, opacity: 0 }}
+                                animate={{ y: 0, opacity: 1 }}
+                                className="flex flex-col items-center"
+                              >
+                                <h3 className="text-[26px] font-black text-white tracking-tight drop-shadow-[0_2px_6px_rgba(0,0,0,1)] leading-none mb-1">
+                                  {selectedBuild.className}
+                                </h3>
+                                <div className="bg-black/90 py-0.5 px-3 rounded-full border border-zinc-800/50 shadow-lg">
+                                  <p className="text-yellow-500 font-black uppercase tracking-[0.3em] text-[5px]">
+                                    {selectedBuild.version || 'REDEN'}
+                                  </p>
+                                </div>
+                              </motion.div>
+                            </div>
                           </div>
                         </div>
 
@@ -1032,13 +1188,14 @@ export default function App() {
                                 whileHover={{ scale: 1.02 }}
                                 className="bg-zinc-900/40 border border-white/5 rounded-2xl p-4 flex items-center gap-4 group hover:border-emerald-500/30 transition-all"
                               >
-                                <div className="w-14 h-14 bg-zinc-950 rounded-xl flex items-center justify-center text-zinc-600 group-hover:text-emerald-500 transition-colors border border-white/5 overflow-hidden">
+                                <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-zinc-600 group-hover:text-emerald-500 transition-colors border border-white/5 overflow-hidden ${eq.image ? 'bg-white' : 'bg-zinc-950'}`}>
                                   {eq.image ? (
-                                    <img src={eq.image} alt={eq.name} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                                    <img src={eq.image} alt={eq.name} className="w-full h-full object-contain p-1" referrerPolicy="no-referrer" />
                                   ) : (
                                     slot.includes('acessorio') ? <Zap size={24} /> : 
                                     slot === 'arma' ? <SwordIcon size={24} /> :
                                     slot === 'escudo' ? <ShieldCheck size={24} /> :
+                                    slot === 'bota' ? <Footprints size={24} /> :
                                     <Plus size={24} />
                                   )}
                                 </div>
@@ -1054,16 +1211,33 @@ export default function App() {
                                     )}
                                   </div>
                                   <p className="text-xs font-bold text-white truncate">{eq.name || 'Vazio'}</p>
-                                  {eq.cards && eq.cards.length > 0 && eq.cards.map((card, idx) => card && (
-                                    <div key={idx} className="mt-1">
-                                      <p className="text-[10px] font-bold text-emerald-500/80 truncate flex items-center gap-1">
-                                        <Sparkles size={10} /> {card}
-                                      </p>
-                                      {eq.cardDescriptions?.[idx] && (
-                                        <p className="text-[8px] text-emerald-600/60 italic pl-3 truncate">{eq.cardDescriptions[idx]}</p>
-                                      )}
-                                    </div>
-                                  ))}
+                                  {eq.cards && eq.cards.length > 0 && (() => {
+                                    // Group identical cards
+                                    const cardCounts = eq.cards.reduce((acc, card) => {
+                                      if (card) acc[card] = (acc[card] || 0) + 1;
+                                      return acc;
+                                    }, {} as Record<string, number>);
+
+                                    return Object.entries(cardCounts).map(([card, count], idx) => (
+                                      <div key={idx} className="mt-1">
+                                        <div className="flex items-center gap-1.5">
+                                          <div className="flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded text-[9px] font-black text-emerald-400">
+                                            <Sparkles size={8} />
+                                            <span className="truncate">{card}</span>
+                                            {count > 1 && <span className="text-yellow-500 ml-1">x{count}</span>}
+                                          </div>
+                                        </div>
+                                        {/* Find description for this card (using first occurrence) */}
+                                        {(() => {
+                                          const cardIdx = eq.cards.indexOf(card);
+                                          const desc = eq.cardDescriptions?.[cardIdx];
+                                          return desc ? (
+                                            <p className="text-[8px] text-emerald-600/60 italic pl-3 truncate mt-0.5">{desc}</p>
+                                          ) : null;
+                                        })()}
+                                      </div>
+                                    ));
+                                  })()}
                                 </div>
                               </motion.div>
                             );
@@ -1144,8 +1318,14 @@ export default function App() {
                     <Calendar className="text-yellow-500" size={20} />
                     <div>
                       <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Próxima Guerra</p>
-                      <p className="text-sm font-bold text-white">{woeSchedule.days.join(', ')}</p>
-                      <p className="text-[10px] text-emerald-400 font-bold">{woeSchedule.startTime} às {woeSchedule.endTime}</p>
+                      {nextWarInfo ? (
+                        <>
+                          <p className="text-sm font-bold text-white">{nextWarInfo.dayName}, {nextWarInfo.date}</p>
+                          <p className="text-[10px] text-emerald-400 font-bold">{woeSchedule.startTime} às {woeSchedule.endTime}</p>
+                        </>
+                      ) : (
+                        <p className="text-sm font-bold text-white/50 italic">Nenhuma guerra agendada</p>
+                      )}
                     </div>
                   </div>
                   <div className="text-right">
@@ -1185,13 +1365,19 @@ export default function App() {
                             <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Adicionar Integrante</p>
                             <form onSubmit={addRosterMember} className="space-y-3">
                               <div className="grid grid-cols-2 gap-3">
-                                <input 
-                                  type="text" 
-                                  placeholder="Classe"
-                                  value={rosterFormClass}
-                                  onChange={(e) => setRosterFormClass(e.target.value)}
-                                  className="bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
-                                />
+                                <div className="relative">
+                                  <input 
+                                    type="text" 
+                                    placeholder="Classe"
+                                    list="roster-classes"
+                                    value={rosterFormClass}
+                                    onChange={(e) => setRosterFormClass(e.target.value)}
+                                    className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                                  />
+                                  <datalist id="roster-classes">
+                                    {availableClasses.map(c => <option key={c} value={c} />)}
+                                  </datalist>
+                                </div>
                                 <input 
                                   type="text" 
                                   placeholder="Nome (Opcional)"
@@ -1262,16 +1448,50 @@ export default function App() {
                           <tr key={member.id} className="group hover:bg-emerald-800/20 transition-colors">
                             <td className="px-4 py-3 text-emerald-700 font-black text-center">{index + 1}</td>
                             <td className="px-4 py-3 text-emerald-300/80 font-medium italic">{member.className}</td>
-                            <td className="px-4 py-3 font-bold text-white flex items-center gap-2">
-                              {isAdmin && isRosterAdminOpen && (
-                                <button 
-                                  onClick={() => deleteRosterMember(member.id)}
-                                  className="text-red-500 hover:text-red-400 transition-colors"
-                                >
-                                  <Trash2 size={12} />
-                                </button>
-                              )}
-                              {member.name || <span className="text-zinc-600 italic">Sem nome</span>}
+                            <td className="px-4 py-3 font-bold text-white">
+                              <div className="flex items-center gap-2">
+                                {isAdmin && isRosterAdminOpen && (
+                                  <div className="flex items-center gap-1">
+                                    <button 
+                                      onClick={() => deleteRosterMember(member.id)}
+                                      className="text-red-500 hover:text-red-400 transition-colors p-1"
+                                      title="Excluir"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                    {editingMemberId === member.id ? (
+                                      <div className="flex items-center gap-1">
+                                        <input 
+                                          autoFocus
+                                          type="text"
+                                          value={editingName}
+                                          onChange={(e) => setEditingName(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') updateRosterMemberName(member.id, editingName);
+                                            if (e.key === 'Escape') setEditingMemberId(null);
+                                          }}
+                                          onBlur={() => updateRosterMemberName(member.id, editingName)}
+                                          className="bg-emerald-950 border border-yellow-500/50 rounded px-1 py-0.5 text-[10px] w-24 outline-none"
+                                        />
+                                      </div>
+                                    ) : (
+                                      <button 
+                                        onClick={() => {
+                                          setEditingMemberId(member.id);
+                                          setEditingName(member.name);
+                                        }}
+                                        className="text-yellow-500 hover:text-yellow-400 transition-colors p-1"
+                                        title="Editar Nome"
+                                      >
+                                        <Settings size={12} />
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                                <span className="truncate">
+                                  {member.name || <span className="text-emerald-500/50 font-black">~</span>}
+                                </span>
+                              </div>
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center justify-center gap-2">
