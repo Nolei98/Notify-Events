@@ -34,7 +34,12 @@ import {
   Layout,
   BookOpen,
   Activity,
-  Footprints
+  Footprints,
+  FileText,
+  Search,
+  Download,
+  Filter,
+  Edit
 } from 'lucide-react';
 import { RAGNAROK_EVENTS, ROEvent } from './constants';
 
@@ -88,6 +93,22 @@ export interface WoESchedule {
   days: string[];
   startTime: string;
   endTime: string;
+}
+
+interface User {
+  id: string;
+  username: string;
+  password: string;
+  role: 'admin' | 'player';
+}
+
+export interface UtilityPost {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+  author: string;
+  createdAt: string;
 }
 
 // Helper to parse time string to minutes since midnight
@@ -364,21 +385,29 @@ export default function App() {
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState(false);
 
+  const [users, setUsers] = useState<User[]>(() => {
+    const saved = localStorage.getItem('leprechaun_users');
+    if (saved) return JSON.parse(saved);
+    return [
+      { id: '1', username: 'admin', password: 'admin123', role: 'admin' },
+      { id: '2', username: 'player', password: '1234', role: 'player' }
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('leprechaun_users', JSON.stringify(users));
+  }, [users]);
+
+  const [userForm, setUserForm] = useState({ username: '', password: '', role: 'player' as 'admin' | 'player' });
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // Admin credentials: admin / admin123
-    // Player credentials: player / 1234
-    if (loginUser === 'admin' && loginPass === 'admin123') {
+    const user = users.find(u => u.username === loginUser && u.password === loginPass);
+    if (user) {
       setIsLoggedIn(true);
-      setIsAdmin(true);
+      setIsAdmin(user.role === 'admin');
       localStorage.setItem('leprechaun_logged_in', 'true');
-      localStorage.setItem('leprechaun_is_admin', 'true');
-      setLoginError(false);
-    } else if (loginUser === 'player' && loginPass === '1234') {
-      setIsLoggedIn(true);
-      setIsAdmin(false);
-      localStorage.setItem('leprechaun_logged_in', 'true');
-      localStorage.setItem('leprechaun_is_admin', 'false');
+      localStorage.setItem('leprechaun_is_admin', user.role === 'admin' ? 'true' : 'false');
       setLoginError(false);
     } else {
       setLoginError(true);
@@ -396,6 +425,135 @@ export default function App() {
   const [editingName, setEditingName] = useState('');
   const [editingClass, setEditingClass] = useState('');
   const [editingVersion, setEditingVersion] = useState('');
+  const [adminTab, setAdminTab] = useState<'roster' | 'users'>('roster');
+
+  // Utilities State
+  const [utilities, setUtilities] = useState<UtilityPost[]>(() => {
+    const saved = localStorage.getItem('leprechaun_utilities');
+    if (saved) return JSON.parse(saved);
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('leprechaun_utilities', JSON.stringify(utilities));
+  }, [utilities]);
+
+  const [isUtilitiesOpen, setIsUtilitiesOpen] = useState(false);
+  const [utilitySearch, setUtilitySearch] = useState('');
+  const [utilityCategory, setUtilityCategory] = useState('Todos');
+  const [isUtilityAdminOpen, setIsUtilityAdminOpen] = useState(false);
+  const [isCategoryAdminOpen, setIsCategoryAdminOpen] = useState(false);
+  const [editingUtilityId, setEditingUtilityId] = useState<string | null>(null);
+  const [utilityForm, setUtilityForm] = useState({ title: '', content: '', category: '' });
+  const [newCategoryName, setNewCategoryName] = useState('');
+
+  const [utilityCategories, setUtilityCategories] = useState<string[]>(() => {
+    const saved = localStorage.getItem('leprechaun_utility_categories');
+    if (saved) return JSON.parse(saved);
+    return ['Geral', 'Guias', 'Dicas', 'Anúncios', 'Outros'];
+  });
+
+  const [playerAllowedCategory, setPlayerAllowedCategory] = useState<string>(() => {
+    return localStorage.getItem('leprechaun_player_allowed_category') || '';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('leprechaun_utility_categories', JSON.stringify(utilityCategories));
+  }, [utilityCategories]);
+
+  useEffect(() => {
+    localStorage.setItem('leprechaun_player_allowed_category', playerAllowedCategory);
+  }, [playerAllowedCategory]);
+
+  useEffect(() => {
+    if (!utilityForm.category && utilityCategories.length > 0) {
+      setUtilityForm(prev => ({ ...prev, category: isAdmin ? utilityCategories[0] : playerAllowedCategory }));
+    }
+  }, [utilityCategories, isAdmin, playerAllowedCategory]);
+
+  const allCategories = useMemo(() => ['Todos', ...utilityCategories], [utilityCategories]);
+
+  const addCategory = () => {
+    if (newCategoryName && !utilityCategories.includes(newCategoryName)) {
+      setUtilityCategories([...utilityCategories, newCategoryName]);
+      setNewCategoryName('');
+    }
+  };
+
+  const deleteCategory = (cat: string) => {
+    setUtilityCategories(utilityCategories.filter(c => c !== cat));
+    if (playerAllowedCategory === cat) setPlayerAllowedCategory('');
+  };
+
+  const exportUtilitiesToExcel = () => {
+    const headers = ['ID', 'Título', 'Categoria', 'Autor', 'Data', 'Conteúdo'];
+    const rows = utilities.map(p => [
+      p.id,
+      p.title,
+      p.category,
+      p.author,
+      new Date(p.createdAt).toLocaleString(),
+      p.content.replace(/,/g, ';').replace(/\n/g, ' ') // Simple CSV escape
+    ]);
+    
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(r => r.join(','))
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'utilities_leprechaun.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const filteredUtilities = useMemo(() => {
+    return utilities
+      .filter(p => {
+        const matchesSearch = p.title.toLowerCase().includes(utilitySearch.toLowerCase()) || 
+                             p.content.toLowerCase().includes(utilitySearch.toLowerCase());
+        const matchesCategory = utilityCategory === 'Todos' || p.category === utilityCategory;
+        return matchesSearch && matchesCategory;
+      })
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [utilities, utilitySearch, utilityCategory]);
+
+  const addUtilityPost = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!utilityForm.title || !utilityForm.content) return;
+    
+    if (editingUtilityId) {
+      setUtilities(prev => prev.map(p => p.id === editingUtilityId ? {
+        ...p,
+        title: utilityForm.title,
+        content: utilityForm.content,
+        category: utilityForm.category
+      } : p));
+      setEditingUtilityId(null);
+    } else {
+      const newPost: UtilityPost = {
+        id: Date.now().toString(),
+        title: utilityForm.title,
+        content: utilityForm.content,
+        category: utilityForm.category,
+        author: loginUser || 'Admin',
+        createdAt: new Date().toISOString()
+      };
+      setUtilities(prev => [newPost, ...prev]);
+    }
+    
+    setUtilityForm({ title: '', content: '', category: isAdmin ? utilityCategories[0] : playerAllowedCategory });
+    setIsUtilityAdminOpen(false);
+  };
+
+  const deleteUtilityPost = (id: string) => {
+    setUtilities(prev => prev.filter(p => p.id !== id));
+  };
 
   // Roster CRUD
   const addRosterMember = (e: React.FormEvent) => {
@@ -1286,6 +1444,329 @@ export default function App() {
         )}
       </AnimatePresence>
       <AnimatePresence>
+        {isUtilitiesOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsUtilitiesOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[250]"
+            />
+            <motion.div 
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed top-0 right-0 h-full w-full md:w-[600px] bg-zinc-950/95 backdrop-blur-2xl border-l border-emerald-500/30 z-[300] shadow-2xl flex flex-col"
+            >
+              {/* Sidebar Header */}
+              <div className="p-6 border-b border-emerald-500/20 flex items-center justify-between bg-emerald-900/10">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-emerald-500/20 rounded-xl border border-emerald-500/40">
+                    <FileText className="text-emerald-500" size={24} />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-black text-white tracking-tight">Utilities & Blog</h2>
+                    <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Guias e Informações Úteis</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={exportUtilitiesToExcel}
+                    className="p-2 text-emerald-500 hover:text-white hover:bg-emerald-800/40 rounded-full transition-all"
+                    title="Exportar para Excel (CSV)"
+                  >
+                    <Download size={20} />
+                  </button>
+                  <button 
+                    onClick={() => setIsUtilitiesOpen(false)}
+                    className="p-2 text-emerald-500 hover:text-white hover:bg-emerald-800/40 rounded-full transition-all"
+                  >
+                    <X size={24} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Sidebar Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                {/* Search and Filter */}
+                <div className="flex flex-col md:flex-row gap-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
+                    <input 
+                      type="text" 
+                      placeholder="Pesquisar postagens..."
+                      value={utilitySearch}
+                      onChange={(e) => setUtilitySearch(e.target.value)}
+                      className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
+                    {allCategories.map(cat => (
+                      <button
+                        key={cat}
+                        onClick={() => setUtilityCategory(cat)}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all shrink-0 ${utilityCategory === cat ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-zinc-900 text-zinc-500 hover:text-emerald-400'}`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Admin Category Management */}
+                {isAdmin && (
+                  <div className="space-y-3">
+                    <button 
+                      onClick={() => setIsCategoryAdminOpen(!isCategoryAdminOpen)}
+                      className="w-full py-2 bg-zinc-900 border border-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-emerald-400 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Settings size={14} /> {isCategoryAdminOpen ? 'Fechar Categorias' : 'Gerenciar Categorias'}
+                    </button>
+                    
+                    <AnimatePresence>
+                      {isCategoryAdminOpen && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden space-y-4 bg-zinc-900/30 p-4 rounded-2xl border border-white/5"
+                        >
+                          <div className="space-y-3">
+                            <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Nova Categoria</p>
+                            <div className="flex gap-2">
+                              <input 
+                                type="text" 
+                                value={newCategoryName}
+                                onChange={(e) => setNewCategoryName(e.target.value)}
+                                placeholder="Nome da categoria..."
+                                className="flex-1 bg-zinc-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                              />
+                              <button 
+                                onClick={addCategory}
+                                className="px-4 bg-emerald-500 text-white rounded-lg hover:bg-emerald-400 transition-colors"
+                              >
+                                <Plus size={16} />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Permissão de Jogador</p>
+                            <div className="space-y-2">
+                              <p className="text-[9px] text-zinc-500">Selecione a categoria onde jogadores podem postar:</p>
+                              <select 
+                                value={playerAllowedCategory}
+                                onChange={(e) => setPlayerAllowedCategory(e.target.value)}
+                                className="w-full bg-zinc-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                              >
+                                <option value="">Nenhuma (Apenas Admin)</option>
+                                {utilityCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Categorias Atuais</p>
+                            <div className="grid grid-cols-2 gap-2">
+                              {utilityCategories.map(cat => (
+                                <div key={cat} className="flex items-center justify-between p-2 bg-zinc-950/50 rounded-lg border border-white/5">
+                                  <span className="text-[10px] text-zinc-300 truncate">{cat}</span>
+                                  <button 
+                                    onClick={() => deleteCategory(cat)}
+                                    className="text-red-500/50 hover:text-red-500"
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+
+                {/* Create Post Button (Admin or Player with permission) */}
+                {(isAdmin || (isLoggedIn && playerAllowedCategory)) && (
+                  <button 
+                    onClick={() => {
+                      if (isUtilityAdminOpen && editingUtilityId) {
+                        // If closing while editing, reset
+                        setEditingUtilityId(null);
+                        setUtilityForm({ title: '', content: '', category: isAdmin ? utilityCategories[0] : playerAllowedCategory });
+                      } else {
+                        setIsUtilityAdminOpen(!isUtilityAdminOpen);
+                        if (!isAdmin && playerAllowedCategory) {
+                          setUtilityForm(prev => ({ ...prev, category: playerAllowedCategory }));
+                        }
+                      }
+                    }}
+                    className="w-full py-3 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-emerald-500 font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center gap-2"
+                  >
+                    <Plus size={18} /> {isUtilityAdminOpen ? (editingUtilityId ? 'Cancelar Edição' : 'Fechar Editor') : 'Nova Postagem'}
+                  </button>
+                )}
+
+                {/* Create Post Form */}
+                <AnimatePresence>
+                  {(isAdmin || (isLoggedIn && playerAllowedCategory)) && isUtilityAdminOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <form onSubmit={addUtilityPost} className="bg-zinc-900/50 border border-emerald-500/30 rounded-3xl p-6 space-y-4 mb-6">
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Título da Postagem</label>
+                            <input 
+                              type="text" 
+                              value={utilityForm.title}
+                              onChange={(e) => setUtilityForm({...utilityForm, title: e.target.value})}
+                              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
+                              placeholder="Ex: Guia de Farm de Zenys"
+                            />
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Categoria</label>
+                              {isAdmin ? (
+                                <select 
+                                  value={utilityForm.category}
+                                  onChange={(e) => setUtilityForm({...utilityForm, category: e.target.value})}
+                                  className="w-full bg-zinc-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
+                                >
+                                  {utilityCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                              ) : (
+                                <div className="w-full bg-zinc-950/50 border border-white/5 rounded-xl px-4 py-3 text-emerald-500 font-black text-xs uppercase tracking-widest">
+                                  {playerAllowedCategory}
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Autor</label>
+                              <input 
+                                type="text" 
+                                value={loginUser}
+                                disabled
+                                className="w-full bg-zinc-950/50 border border-white/5 rounded-xl px-4 py-3 text-zinc-500 cursor-not-allowed"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Conteúdo (Suporta HTML)</label>
+                            <textarea 
+                              value={utilityForm.content}
+                              onChange={(e) => setUtilityForm({...utilityForm, content: e.target.value})}
+                              className="w-full h-48 bg-zinc-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 text-sm"
+                              placeholder="Escreva o conteúdo aqui..."
+                            />
+                          </div>
+                        </div>
+                        <button 
+                          type="submit"
+                          className="w-full py-3 bg-emerald-500 text-white font-black uppercase tracking-widest rounded-xl hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20"
+                        >
+                          {editingUtilityId ? 'Salvar Alterações' : 'Publicar Postagem'}
+                        </button>
+                      </form>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Posts List */}
+                <div className="space-y-6">
+                  {filteredUtilities.map((post) => (
+                    <motion.div 
+                      key={post.id}
+                      layout
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-zinc-900/40 border border-white/5 rounded-3xl overflow-hidden group hover:border-emerald-500/30 transition-all"
+                    >
+                      <div className="p-6 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <span className="px-3 py-1 bg-emerald-500/10 text-emerald-500 text-[10px] font-black uppercase tracking-widest rounded-full border border-emerald-500/20">
+                            {post.category}
+                          </span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-[10px] text-zinc-500 font-bold flex items-center gap-1">
+                              <Clock size={12} /> {new Date(post.createdAt).toLocaleDateString()}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              {(isAdmin || post.author === loginUser) && (
+                                <>
+                                  <button 
+                                    onClick={() => {
+                                      setEditingUtilityId(post.id);
+                                      setUtilityForm({
+                                        title: post.title,
+                                        content: post.content,
+                                        category: post.category
+                                      });
+                                      setIsUtilityAdminOpen(true);
+                                      // Scroll to top of sidebar
+                                      const sidebar = document.querySelector('.custom-scrollbar');
+                                      if (sidebar) sidebar.scrollTo({ top: 0, behavior: 'smooth' });
+                                    }}
+                                    className="p-1.5 text-emerald-500/40 hover:text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-all"
+                                    title="Editar Postagem"
+                                  >
+                                    <Edit size={14} />
+                                  </button>
+                                  <button 
+                                    onClick={() => deleteUtilityPost(post.id)}
+                                    className="p-1.5 text-red-500/40 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
+                                    title="Excluir Postagem"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <h3 className="text-xl font-black text-white group-hover:text-emerald-400 transition-colors mb-2">{post.title}</h3>
+                          <div 
+                            className="text-sm text-zinc-400 leading-relaxed prose prose-invert max-w-none"
+                            dangerouslySetInnerHTML={{ __html: post.content.replace(/\n/g, '<br>') }}
+                          />
+                        </div>
+
+                        <div className="pt-4 border-t border-white/5 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px] font-black text-emerald-500">
+                              {post.author[0].toUpperCase()}
+                            </div>
+                            <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Postado por {post.author}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+
+                  {filteredUtilities.length === 0 && (
+                    <div className="p-12 text-center space-y-4 bg-zinc-900/20 border border-white/5 rounded-3xl">
+                      <div className="inline-flex p-4 bg-zinc-900 rounded-full text-zinc-700">
+                        <FileText size={32} />
+                      </div>
+                      <p className="text-zinc-500 font-bold italic">Nenhuma postagem encontrada.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
         {isRosterOpen && (
           <>
             <motion.div 
@@ -1370,91 +1851,184 @@ export default function App() {
                         exit={{ height: 0, opacity: 0 }}
                         className="overflow-hidden"
                       >
+                        <div className="flex items-center gap-2 mb-4 p-1 bg-emerald-900/40 rounded-xl border border-emerald-500/10">
+                          <button 
+                            onClick={() => setAdminTab('roster')}
+                            className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${adminTab === 'roster' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-emerald-500/60 hover:text-emerald-400'}`}
+                          >
+                            Plantel
+                          </button>
+                          <button 
+                            onClick={() => setAdminTab('users')}
+                            className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${adminTab === 'users' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-emerald-500/60 hover:text-emerald-400'}`}
+                          >
+                            Usuários
+                          </button>
+                        </div>
+
                         <div className="space-y-4 mb-4">
-                          {/* Member Form */}
-                          <div className="bg-emerald-900/40 border border-yellow-500/30 rounded-2xl p-4 space-y-3">
-                            <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Adicionar Integrante</p>
-                            <form onSubmit={addRosterMember} className="space-y-3">
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <div className="space-y-3">
-                                  <div className="relative">
+                          {adminTab === 'roster' ? (
+                            <>
+                              {/* Member Form */}
+                              <div className="bg-emerald-900/40 border border-yellow-500/30 rounded-2xl p-4 space-y-3">
+                                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Adicionar Integrante</p>
+                                <form onSubmit={addRosterMember} className="space-y-3">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div className="space-y-3">
+                                      <div className="relative">
+                                        <input 
+                                          type="text" 
+                                          placeholder="Classe"
+                                          list="roster-classes"
+                                          value={rosterFormClass}
+                                          onChange={(e) => setRosterFormClass(e.target.value)}
+                                          className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                                        />
+                                        <datalist id="roster-classes">
+                                          {availableClasses.map(c => <option key={c} value={c} />)}
+                                        </datalist>
+                                      </div>
+                                      <input 
+                                        type="text" 
+                                        placeholder="Versão (ex: Default)"
+                                        value={rosterFormVersion}
+                                        onChange={(e) => setRosterFormVersion(e.target.value)}
+                                        className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                                        list="roster-versions"
+                                      />
+                                      <datalist id="roster-versions">
+                                        {builds.filter(b => b.className.toLowerCase() === rosterFormClass.toLowerCase()).map(b => (
+                                          <option key={b.id} value={b.version} />
+                                        ))}
+                                        <option value="Default" />
+                                      </datalist>
+                                    </div>
                                     <input 
                                       type="text" 
-                                      placeholder="Classe"
-                                      list="roster-classes"
-                                      value={rosterFormClass}
-                                      onChange={(e) => setRosterFormClass(e.target.value)}
-                                      className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                                      placeholder="Nome (Opcional)"
+                                      value={rosterFormName}
+                                      onChange={(e) => setRosterFormName(e.target.value)}
+                                      className="bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500 h-full"
                                     />
-                                    <datalist id="roster-classes">
-                                      {availableClasses.map(c => <option key={c} value={c} />)}
-                                    </datalist>
                                   </div>
+                                  <button 
+                                    type="submit"
+                                    className="w-full py-2 bg-emerald-500 text-white text-xs font-black rounded-lg hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2"
+                                  >
+                                    <Plus size={14} /> ADICIONAR AO PLANTEL
+                                  </button>
+                                </form>
+                              </div>
+
+                              {/* Schedule Form */}
+                              <div className="bg-emerald-900/40 border border-emerald-500/30 rounded-2xl p-4 space-y-3">
+                                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Configurar Guerra</p>
+                                <div className="space-y-3">
                                   <input 
                                     type="text" 
-                                    placeholder="Versão (ex: Default)"
-                                    value={rosterFormVersion}
-                                    onChange={(e) => setRosterFormVersion(e.target.value)}
+                                    placeholder="Dias (ex: Ter, Qui, Sáb)"
+                                    value={woeSchedule.days.join(', ')}
+                                    onChange={(e) => setWoeSchedule(prev => ({ ...prev, days: e.target.value.split(',').map(d => d.trim()) }))}
                                     className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
-                                    list="roster-versions"
                                   />
-                                  <datalist id="roster-versions">
-                                    {builds.filter(b => b.className.toLowerCase() === rosterFormClass.toLowerCase()).map(b => (
-                                      <option key={b.id} value={b.version} />
-                                    ))}
-                                    <option value="Default" />
-                                  </datalist>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                      <label className="block text-[8px] font-black text-emerald-600 uppercase mb-1">Início</label>
+                                      <input 
+                                        type="time" 
+                                        value={woeSchedule.startTime}
+                                        onChange={(e) => setWoeSchedule(prev => ({ ...prev, startTime: e.target.value }))}
+                                        className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[8px] font-black text-emerald-600 uppercase mb-1">Término</label>
+                                      <input 
+                                        type="time" 
+                                        value={woeSchedule.endTime}
+                                        onChange={(e) => setWoeSchedule(prev => ({ ...prev, endTime: e.target.value }))}
+                                        className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                                      />
+                                    </div>
+                                  </div>
                                 </div>
-                                <input 
-                                  type="text" 
-                                  placeholder="Nome (Opcional)"
-                                  value={rosterFormName}
-                                  onChange={(e) => setRosterFormName(e.target.value)}
-                                  className="bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500 h-full"
-                                />
                               </div>
-                              <button 
-                                type="submit"
-                                className="w-full py-2 bg-emerald-500 text-white text-xs font-black rounded-lg hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2"
-                              >
-                                <Plus size={14} /> ADICIONAR AO PLANTEL
-                              </button>
-                            </form>
-                          </div>
+                            </>
+                          ) : (
+                            <div className="space-y-4">
+                              {/* User Form */}
+                              <div className="bg-emerald-900/40 border border-yellow-500/30 rounded-2xl p-4 space-y-3">
+                                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Adicionar Usuário</p>
+                                <form 
+                                  onSubmit={(e) => {
+                                    e.preventDefault();
+                                    if (userForm.username && userForm.password) {
+                                      const newUser: User = {
+                                        id: Date.now().toString(),
+                                        username: userForm.username,
+                                        password: userForm.password,
+                                        role: userForm.role
+                                      };
+                                      setUsers([...users, newUser]);
+                                      setUserForm({ username: '', password: '', role: 'player' });
+                                    }
+                                  }} 
+                                  className="space-y-3"
+                                >
+                                  <div className="grid grid-cols-1 gap-3">
+                                    <input 
+                                      type="text" 
+                                      placeholder="Usuário"
+                                      value={userForm.username}
+                                      onChange={(e) => setUserForm({...userForm, username: e.target.value})}
+                                      className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                                    />
+                                    <input 
+                                      type="password" 
+                                      placeholder="Senha"
+                                      value={userForm.password}
+                                      onChange={(e) => setUserForm({...userForm, password: e.target.value})}
+                                      className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                                    />
+                                    <select 
+                                      value={userForm.role}
+                                      onChange={(e) => setUserForm({...userForm, role: e.target.value as 'admin' | 'player'})}
+                                      className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                                    >
+                                      <option value="player">Jogador</option>
+                                      <option value="admin">Admin</option>
+                                    </select>
+                                  </div>
+                                  <button 
+                                    type="submit"
+                                    className="w-full py-2 bg-emerald-500 text-white text-xs font-black rounded-lg hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2"
+                                  >
+                                    <Plus size={14} /> CRIAR USUÁRIO
+                                  </button>
+                                </form>
+                              </div>
 
-                          {/* Schedule Form */}
-                          <div className="bg-emerald-900/40 border border-emerald-500/30 rounded-2xl p-4 space-y-3">
-                            <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Configurar Guerra</p>
-                            <div className="space-y-3">
-                              <input 
-                                type="text" 
-                                placeholder="Dias (ex: Ter, Qui, Sáb)"
-                                value={woeSchedule.days.join(', ')}
-                                onChange={(e) => setWoeSchedule(prev => ({ ...prev, days: e.target.value.split(',').map(d => d.trim()) }))}
-                                className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
-                              />
-                              <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                  <label className="block text-[8px] font-black text-emerald-600 uppercase mb-1">Início</label>
-                                  <input 
-                                    type="time" 
-                                    value={woeSchedule.startTime}
-                                    onChange={(e) => setWoeSchedule(prev => ({ ...prev, startTime: e.target.value }))}
-                                    className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-[8px] font-black text-emerald-600 uppercase mb-1">Término</label>
-                                  <input 
-                                    type="time" 
-                                    value={woeSchedule.endTime}
-                                    onChange={(e) => setWoeSchedule(prev => ({ ...prev, endTime: e.target.value }))}
-                                    className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
-                                  />
-                                </div>
+                              {/* Users List */}
+                              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                                {users.map(u => (
+                                  <div key={u.id} className="flex items-center justify-between p-3 bg-emerald-900/20 border border-emerald-500/10 rounded-xl">
+                                    <div>
+                                      <p className="text-xs font-black text-white">{u.username}</p>
+                                      <p className="text-[8px] font-black text-emerald-500 uppercase tracking-widest">{u.role}</p>
+                                    </div>
+                                    {u.username !== 'admin' && (
+                                      <button 
+                                        onClick={() => setUsers(users.filter(user => user.id !== u.id))}
+                                        className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
                               </div>
                             </div>
-                          </div>
+                          )}
                         </div>
                       </motion.div>
                     )}
@@ -1671,6 +2245,15 @@ export default function App() {
 
           <div className="flex items-center justify-center md:justify-end gap-3">
             <button 
+              onClick={() => setIsUtilitiesOpen(true)}
+              className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all border border-emerald-500/30 shadow-lg shadow-emerald-500/10 flex items-center gap-2"
+              title="Utilities & Blog"
+            >
+              <FileText size={20} />
+              <span className="hidden lg:inline text-xs font-black uppercase tracking-tighter">Utilities</span>
+            </button>
+
+            <button 
               onClick={() => setIsBuildsOpen(true)}
               className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all border border-emerald-500/30 shadow-lg shadow-emerald-500/10 flex items-center gap-2"
               title="Builds das Classes"
@@ -1750,13 +2333,15 @@ export default function App() {
               </AnimatePresence>
             </div>
 
-            <button 
-              onClick={() => setIsStaffPanelOpen(true)}
-              className="p-2 rounded-lg bg-emerald-900/40 text-emerald-400 hover:text-white hover:bg-emerald-800/40 transition-colors"
-              title="Adicionar Evento Staff"
-            >
-              <Plus size={20} />
-            </button>
+            {isAdmin && (
+              <button 
+                onClick={() => setIsStaffPanelOpen(true)}
+                className="p-2 rounded-lg bg-emerald-900/40 text-emerald-400 hover:text-white hover:bg-emerald-800/40 transition-colors"
+                title="Adicionar Evento Staff"
+              >
+                <Plus size={20} />
+              </button>
+            )}
             <button 
               onClick={() => setSoundEnabled(!soundEnabled)}
               className={`p-2 rounded-lg transition-colors ${soundEnabled ? 'bg-emerald-900/40 text-yellow-400' : 'bg-emerald-900/20 text-emerald-700'}`}
@@ -2166,13 +2751,15 @@ export default function App() {
               </div>
 
               {/* Staff Button */}
-              <button 
-                onClick={() => setIsStaffPanelOpen(true)}
-                className="p-4 rounded-full bg-emerald-950/80 backdrop-blur-md border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-white shadow-2xl transition-all"
-                title="Adicionar Evento Staff"
-              >
-                <Plus size={24} />
-              </button>
+              {isAdmin && (
+                <button 
+                  onClick={() => setIsStaffPanelOpen(true)}
+                  className="p-4 rounded-full bg-emerald-950/80 backdrop-blur-md border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-white shadow-2xl transition-all"
+                  title="Adicionar Evento Staff"
+                >
+                  <Plus size={24} />
+                </button>
+              )}
 
               {/* Sound Toggle */}
               <button 
