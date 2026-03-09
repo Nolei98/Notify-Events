@@ -16,9 +16,72 @@ import {
   X,
   Coins,
   Zap,
-  ChevronUp
+  ChevronUp,
+  Check,
+  CheckCircle2,
+  XCircle,
+  Users,
+  Settings,
+  Calendar,
+  ShieldCheck,
+  Sword as SwordIcon,
+  Wand2,
+  Music,
+  FlaskConical,
+  Target,
+  Ghost,
+  Flame,
+  Layout,
+  BookOpen,
+  Activity
 } from 'lucide-react';
 import { RAGNAROK_EVENTS, ROEvent } from './constants';
+
+export interface BuildEquipment {
+  name: string;
+  card: string;
+  slots?: number;
+}
+
+export interface BuildAttributes {
+  str: number;
+  agi: number;
+  vit: number;
+  int: number;
+  dex: number;
+  luk: number;
+}
+
+export interface ClassBuild {
+  id: string;
+  className: string;
+  version?: string;
+  image: string;
+  attributes: BuildAttributes;
+  equipment: {
+    elmo: BuildEquipment;
+    meio: BuildEquipment;
+    baixo: BuildEquipment;
+    arma: BuildEquipment;
+    capa: BuildEquipment;
+    armadura: BuildEquipment;
+    escudo: BuildEquipment;
+    acessorio1: BuildEquipment;
+    acessorio2: BuildEquipment;
+  };
+}
+
+export interface RosterMember {
+  id: string;
+  name: string;
+  className: string;
+  confirmed: boolean | null;
+}
+
+export interface WoESchedule {
+  days: string[];
+  time: string;
+}
 
 // Helper to parse time string to minutes since midnight
 const timeToMinutes = (timeStr: string) => {
@@ -142,9 +205,145 @@ export default function App() {
   const [formCategory, setFormCategory] = useState<ROEvent['category']>('Special');
   const [showScrollTop, setShowScrollTop] = useState(false);
 
+  // Roster State
+  const [isRosterOpen, setIsRosterOpen] = useState(false);
+  const [roster, setRoster] = useState<RosterMember[]>([]);
+  const [woeSchedule, setWoeSchedule] = useState<WoESchedule>({ days: ['Terça', 'Quinta', 'Sábado'], time: '20:00' });
+  const [dataLoaded, setDataLoaded] = useState(false);
+
+  // Fetch initial data from server
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const response = await fetch('/api/data');
+        if (response.ok) {
+          const data = await response.json();
+          setRoster(data.roster || []);
+          setWoeSchedule(data.woeSchedule || { days: ['Terça', 'Quinta', 'Sábado'], time: '20:00' });
+          setDataLoaded(true);
+        }
+      } catch (error) {
+        console.error("Failed to fetch shared data:", error);
+      }
+    };
+    fetchData();
+  }, []);
+
+  // Save data to server whenever it changes
+  useEffect(() => {
+    if (!dataLoaded) return;
+    
+    const saveData = async () => {
+      try {
+        await fetch('/api/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roster, woeSchedule })
+        });
+      } catch (error) {
+        console.error("Failed to save shared data:", error);
+      }
+    };
+    
+    const timer = setTimeout(saveData, 500); // Debounce saves
+    return () => clearTimeout(timer);
+  }, [roster, woeSchedule, dataLoaded]);
+
+  // Admin Form for Roster
+  const [isRosterAdminOpen, setIsRosterAdminOpen] = useState(false);
+  const [rosterFormName, setRosterFormName] = useState('');
+  const [rosterFormClass, setRosterFormClass] = useState('');
+
+  // Builds State
+  const [isBuildsOpen, setIsBuildsOpen] = useState(false);
+  const [builds, setBuilds] = useState<ClassBuild[]>([]);
+  const [selectedBuildId, setSelectedBuildId] = useState<string | null>(null);
+  const [isBuildAdminOpen, setIsBuildAdminOpen] = useState(false);
+  const [buildsLoaded, setBuildsLoaded] = useState(false);
+
+  // Build Form State
+  const [buildForm, setBuildForm] = useState<Partial<ClassBuild>>({
+    className: 'Paladin',
+    version: '',
+    attributes: { str: 1, agi: 1, vit: 1, int: 1, dex: 1, luk: 1 },
+    equipment: {
+      elmo: { name: '', card: '', slots: 0 },
+      meio: { name: '', card: '', slots: 0 },
+      baixo: { name: '', card: '', slots: 0 },
+      arma: { name: '', card: '', slots: 0 },
+      capa: { name: '', card: '', slots: 0 },
+      armadura: { name: '', card: '', slots: 0 },
+      escudo: { name: '', card: '', slots: 0 },
+      acessorio1: { name: '', card: '', slots: 0 },
+      acessorio2: { name: '', card: '', slots: 0 },
+    }
+  });
+
+  // Fetch builds from server
+  useEffect(() => {
+    const fetchBuilds = async () => {
+      try {
+        const response = await fetch('/api/builds');
+        if (response.ok) {
+          const data = await response.json();
+          setBuilds(data.builds || []);
+          setBuildsLoaded(true);
+          if (data.builds?.length > 0) {
+            setSelectedBuildId(data.builds[0].id);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch builds:", error);
+      }
+    };
+    fetchBuilds();
+  }, []);
+
+  // Save builds to server
+  useEffect(() => {
+    if (!buildsLoaded) return;
+    const saveBuilds = async () => {
+      try {
+        await fetch('/api/builds', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ builds })
+        });
+      } catch (error) {
+        console.error("Failed to save builds:", error);
+      }
+    };
+    const timer = setTimeout(saveBuilds, 500);
+    return () => clearTimeout(timer);
+  }, [builds, buildsLoaded]);
+
+  const handleAddBuild = (e: React.FormEvent) => {
+    e.preventDefault();
+    const newBuild: ClassBuild = {
+      ...buildForm as ClassBuild,
+      id: Date.now().toString(),
+      image: `https://api.dicebear.com/7.x/avataaars/svg?seed=${buildForm.className}${buildForm.version}`
+    };
+    setBuilds(prev => [...prev, newBuild]);
+    setSelectedBuildId(newBuild.id);
+    setIsBuildAdminOpen(false);
+  };
+
+  const handleDeleteBuild = (id: string) => {
+    setBuilds(prev => prev.filter(b => b.id !== id));
+    if (selectedBuildId === id) {
+      setSelectedBuildId(builds.find(b => b.id !== id)?.id || null);
+    }
+  };
+
+  const selectedBuild = useMemo(() => builds.find(b => b.id === selectedBuildId), [builds, selectedBuildId]);
+
   // Login State
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
     return localStorage.getItem('leprechaun_logged_in') === 'true';
+  });
+  const [isAdmin, setIsAdmin] = useState(() => {
+    return localStorage.getItem('leprechaun_is_admin') === 'true';
   });
   const [loginUser, setLoginUser] = useState('');
   const [loginPass, setLoginPass] = useState('');
@@ -152,9 +351,19 @@ export default function App() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (loginUser === 'player' && loginPass === '1234') {
+    // Admin credentials: admin / admin123
+    // Player credentials: player / 1234
+    if (loginUser === 'admin' && loginPass === 'admin123') {
       setIsLoggedIn(true);
+      setIsAdmin(true);
       localStorage.setItem('leprechaun_logged_in', 'true');
+      localStorage.setItem('leprechaun_is_admin', 'true');
+      setLoginError(false);
+    } else if (loginUser === 'player' && loginPass === '1234') {
+      setIsLoggedIn(true);
+      setIsAdmin(false);
+      localStorage.setItem('leprechaun_logged_in', 'true');
+      localStorage.setItem('leprechaun_is_admin', 'false');
       setLoginError(false);
     } else {
       setLoginError(true);
@@ -163,7 +372,32 @@ export default function App() {
 
   const handleLogout = () => {
     setIsLoggedIn(false);
+    setIsAdmin(false);
     localStorage.removeItem('leprechaun_logged_in');
+    localStorage.removeItem('leprechaun_is_admin');
+  };
+
+  // Roster CRUD
+  const addRosterMember = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rosterFormName || !rosterFormClass) return;
+    const newMember: RosterMember = {
+      id: Date.now().toString(),
+      name: rosterFormName,
+      className: rosterFormClass,
+      confirmed: null
+    };
+    setRoster(prev => [...prev, newMember]);
+    setRosterFormName('');
+    setRosterFormClass('');
+  };
+
+  const deleteRosterMember = (id: string) => {
+    setRoster(prev => prev.filter(m => m.id !== id));
+  };
+
+  const updateConfirmation = (id: string, status: boolean | null) => {
+    setRoster(prev => prev.map(m => m.id === id ? { ...m, confirmed: status } : m));
   };
 
   // Scroll to top logic
@@ -428,7 +662,516 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Header */}
+      {/* Builds Section */}
+      <AnimatePresence>
+        {isBuildsOpen && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 1.1 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.1 }}
+            className="fixed inset-0 z-[500] bg-zinc-950 flex flex-col overflow-hidden"
+          >
+            {/* Background for Builds */}
+            <div className="absolute inset-0 pointer-events-none opacity-20">
+              <img 
+                src="https://i.pinimg.com/originals/7e/7a/8b/7e7a8bf3cfd1db0296073a856ae01776.gif" 
+                alt="Background" 
+                className="w-full h-full object-cover grayscale"
+                referrerPolicy="no-referrer"
+              />
+              <div className="absolute inset-0 bg-gradient-to-b from-zinc-950 via-transparent to-zinc-950" />
+            </div>
+
+            {/* Header */}
+            <div className="relative z-10 p-6 border-b border-white/10 flex items-center justify-between bg-zinc-900/50 backdrop-blur-md">
+              <div className="flex items-center gap-4">
+                <button 
+                  onClick={() => setIsBuildsOpen(false)}
+                  className="p-2 hover:bg-white/10 rounded-full transition-colors text-emerald-500"
+                >
+                  <X size={28} />
+                </button>
+                <div>
+                  <h2 className="text-2xl font-black text-white tracking-tight">Seleção de Classe & Builds</h2>
+                  <p className="text-[10px] text-emerald-500 font-black uppercase tracking-[0.2em]">Leprechaun Knowledge Base</p>
+                </div>
+              </div>
+              {isAdmin && (
+                <button 
+                  onClick={() => setIsBuildAdminOpen(!isBuildAdminOpen)}
+                  className="flex items-center gap-2 px-4 py-2 bg-yellow-500/20 text-yellow-500 border border-yellow-500/30 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-yellow-500 hover:text-white transition-all"
+                >
+                  <Settings size={16} /> {isBuildAdminOpen ? 'FECHAR ADMIN' : 'CADASTRAR BUILD'}
+                </button>
+              )}
+            </div>
+
+            <div className="relative z-10 flex-1 flex flex-col md:flex-row overflow-hidden">
+              {/* Sidebar: Class Selection */}
+              <div className="w-full md:w-72 bg-zinc-900/30 border-r border-white/5 overflow-y-auto p-4 space-y-2">
+                {['Paladin', 'Professor', 'Clown', 'High Wizard', 'Creator', 'Sniper', 'Stalker', 'Champion'].map(cls => {
+                  const classBuilds = builds.filter(b => b.className === cls);
+                  return (
+                    <div key={cls} className="space-y-1">
+                      <div className="px-3 py-2 text-[10px] font-black text-zinc-500 uppercase tracking-widest border-b border-white/5 mb-1">
+                        {cls}
+                      </div>
+                      {classBuilds.length > 0 ? (
+                        classBuilds.map(b => (
+                          <button
+                            key={b.id}
+                            onClick={() => setSelectedBuildId(b.id)}
+                            className={`w-full text-left px-4 py-3 rounded-xl transition-all flex items-center justify-between group ${selectedBuildId === b.id ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-zinc-400 hover:bg-white/5'}`}
+                          >
+                            <span className="font-bold text-sm">{b.version || 'Default'}</span>
+                            <ChevronUp className={`rotate-90 transition-transform ${selectedBuildId === b.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}`} size={14} />
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-4 py-2 text-[10px] text-zinc-600 italic">Nenhuma build cadastrada</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Main Content: Build Details */}
+              <div className="flex-1 overflow-y-auto p-6 md:p-12">
+                <AnimatePresence mode="wait">
+                  {isBuildAdminOpen ? (
+                    <motion.div 
+                      key="admin"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      className="max-w-4xl mx-auto bg-zinc-900/80 border border-emerald-500/20 rounded-3xl p-8 shadow-2xl"
+                    >
+                      <h3 className="text-xl font-black text-white mb-6 flex items-center gap-2">
+                        <Plus className="text-emerald-500" /> Cadastrar Nova Build
+                      </h3>
+                      <form onSubmit={handleAddBuild} className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Classe</label>
+                            <select 
+                              value={buildForm.className}
+                              onChange={e => setBuildForm({...buildForm, className: e.target.value})}
+                              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
+                            >
+                              {['Paladin', 'Professor', 'Clown', 'High Wizard', 'Creator', 'Sniper', 'Stalker', 'Champion'].map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Versão (ex: Song, Banshee)</label>
+                            <input 
+                              type="text"
+                              value={buildForm.version}
+                              onChange={e => setBuildForm({...buildForm, version: e.target.value})}
+                              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
+                              placeholder="Padrão"
+                            />
+                          </div>
+                          <div className="grid grid-cols-3 gap-3">
+                            {['str', 'agi', 'vit', 'int', 'dex', 'luk'].map(attr => (
+                              <div key={attr}>
+                                <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">{attr}</label>
+                                <input 
+                                  type="number"
+                                  value={buildForm.attributes?.[attr as keyof BuildAttributes]}
+                                  onChange={e => setBuildForm({
+                                    ...buildForm, 
+                                    attributes: { ...buildForm.attributes!, [attr]: parseInt(e.target.value) }
+                                  })}
+                                  className="w-full bg-zinc-950 border border-white/10 rounded-lg px-2 py-2 text-xs text-white"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Equipamentos & Cartas</label>
+                          <div className="grid grid-cols-1 gap-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                            {['elmo', 'meio', 'baixo', 'arma', 'capa', 'armadura', 'escudo', 'acessorio1', 'acessorio2'].map(slot => (
+                              <div key={slot} className="p-3 bg-zinc-950/50 border border-white/5 rounded-xl space-y-2">
+                                <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{slot}</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <input 
+                                    type="text"
+                                    placeholder="Nome do Equipamento"
+                                    value={buildForm.equipment?.[slot as keyof ClassBuild['equipment']].name}
+                                    onChange={e => setBuildForm({
+                                      ...buildForm,
+                                      equipment: {
+                                        ...buildForm.equipment!,
+                                        [slot]: { ...buildForm.equipment![slot as keyof ClassBuild['equipment']], name: e.target.value }
+                                      }
+                                    })}
+                                    className="w-full bg-zinc-900 border border-white/5 rounded-lg px-3 py-1.5 text-xs text-white"
+                                  />
+                                  <input 
+                                    type="number"
+                                    placeholder="Slots"
+                                    min="0"
+                                    max="4"
+                                    value={buildForm.equipment?.[slot as keyof ClassBuild['equipment']].slots || 0}
+                                    onChange={e => setBuildForm({
+                                      ...buildForm,
+                                      equipment: {
+                                        ...buildForm.equipment!,
+                                        [slot]: { ...buildForm.equipment![slot as keyof ClassBuild['equipment']], slots: parseInt(e.target.value) }
+                                      }
+                                    })}
+                                    className="w-full bg-zinc-900 border border-white/5 rounded-lg px-3 py-1.5 text-xs text-white"
+                                  />
+                                </div>
+                                <input 
+                                  type="text"
+                                  placeholder="Carta"
+                                  value={buildForm.equipment?.[slot as keyof ClassBuild['equipment']].card}
+                                  onChange={e => setBuildForm({
+                                    ...buildForm,
+                                    equipment: {
+                                      ...buildForm.equipment!,
+                                      [slot]: { ...buildForm.equipment![slot as keyof ClassBuild['equipment']], card: e.target.value }
+                                    }
+                                  })}
+                                  className="w-full bg-zinc-900 border border-white/5 rounded-lg px-3 py-1.5 text-xs text-emerald-400"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="md:col-span-2 pt-6">
+                          <button 
+                            type="submit"
+                            className="w-full py-4 bg-emerald-500 text-white font-black rounded-2xl shadow-xl shadow-emerald-500/20 hover:bg-emerald-400 transition-all flex items-center justify-center gap-2"
+                          >
+                            <CheckCircle2 size={20} /> FINALIZAR CADASTRO
+                          </button>
+                        </div>
+                      </form>
+                    </motion.div>
+                  ) : selectedBuild ? (
+                    <motion.div 
+                      key={selectedBuild.id}
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 items-start"
+                    >
+                      {/* Left: Class Image & Attributes */}
+                      <div className="lg:col-span-5 space-y-8">
+                        <div className="relative group">
+                          <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <img 
+                            src={selectedBuild.image} 
+                            alt={selectedBuild.className}
+                            className="w-full aspect-square object-contain relative z-10 drop-shadow-[0_20px_50px_rgba(16,185,129,0.3)]"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-zinc-950 to-transparent text-center">
+                            <h3 className="text-5xl font-black text-white tracking-tighter">{selectedBuild.className}</h3>
+                            <p className="text-emerald-500 font-black uppercase tracking-[0.3em] text-xs mt-2">{selectedBuild.version || 'Build Padrão'}</p>
+                          </div>
+                        </div>
+
+                        {/* Attributes Radar-like display */}
+                        <div className="bg-zinc-900/50 border border-white/5 rounded-3xl p-8 backdrop-blur-sm">
+                          <div className="flex items-center justify-between mb-6">
+                            <h4 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2">
+                              <Activity size={14} /> Atributos Base
+                            </h4>
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="text-[9px] font-black text-yellow-500 uppercase tracking-widest">Anti Freeze: 200 LUK</span>
+                              <span className="text-[9px] font-black text-yellow-500 uppercase tracking-widest">ASPD: 195</span>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-6">
+                            {Object.entries(selectedBuild.attributes).map(([key, val]) => (
+                              <div key={key} className="flex items-center justify-between group">
+                                <span className="text-xs font-black text-zinc-500 uppercase tracking-widest group-hover:text-emerald-400 transition-colors">{key}</span>
+                                <div className="flex items-center gap-3">
+                                  <div className="h-1 w-24 bg-zinc-800 rounded-full overflow-hidden">
+                                    <motion.div 
+                                      initial={{ width: 0 }}
+                                      animate={{ width: `${Math.min(((val as number) / 99) * 100, 100)}%` }}
+                                      className="h-full bg-emerald-500"
+                                    />
+                                  </div>
+                                  <span className="text-sm font-black text-white w-8 text-right">{val}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right: Equipment Grid */}
+                      <div className="lg:col-span-7 space-y-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <h4 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2">
+                            <SwordIcon size={14} /> Configuração de Equipamentos
+                          </h4>
+                          {isAdmin && (
+                            <button 
+                              onClick={() => handleDeleteBuild(selectedBuild.id)}
+                              className="text-red-500 hover:text-red-400 transition-colors p-2"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {Object.entries(selectedBuild.equipment).map(([slot, data]) => (
+                            <motion.div 
+                              key={slot}
+                              whileHover={{ scale: 1.02 }}
+                              className="bg-zinc-900/40 border border-white/5 rounded-2xl p-4 flex items-center gap-4 group hover:border-emerald-500/30 transition-all"
+                            >
+                              <div className="w-12 h-12 bg-zinc-950 rounded-xl flex items-center justify-center text-zinc-600 group-hover:text-emerald-500 transition-colors border border-white/5">
+                                {slot.includes('acessorio') ? <Zap size={20} /> : 
+                                 slot === 'arma' ? <SwordIcon size={20} /> :
+                                 slot === 'escudo' ? <ShieldCheck size={20} /> :
+                                 <Plus size={20} />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between mb-0.5">
+                                  <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">{slot}</p>
+                                  {(data as BuildEquipment).slots !== undefined && (data as BuildEquipment).slots! > 0 && (
+                                    <div className="flex gap-0.5">
+                                      {[...Array((data as BuildEquipment).slots)].map((_, i) => (
+                                        <div key={i} className="w-1.5 h-1.5 rounded-full bg-emerald-500/40 border border-emerald-500/60" />
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                <p className="text-xs font-bold text-white truncate">{(data as BuildEquipment).name || 'Vazio'}</p>
+                                {(data as BuildEquipment).card && (
+                                  <p className="text-[10px] font-bold text-emerald-500/80 truncate flex items-center gap-1">
+                                    <Sparkles size={10} /> {(data as BuildEquipment).card}
+                                  </p>
+                                )}
+                              </div>
+                            </motion.div>
+                          ))}
+                        </div>
+
+                        {/* Class Intro (Placeholder text) */}
+                        <div className="mt-8 p-6 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl italic text-emerald-400/60 text-sm leading-relaxed">
+                          "O {selectedBuild.className} é essencial para a estratégia da WoE. Esta build de {selectedBuild.version || 'Padrão'} foca em maximizar a eficiência do clã durante os embates mais intensos."
+                        </div>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-center space-y-4">
+                      <div className="p-6 bg-zinc-900 rounded-full border border-white/5">
+                        <Layout size={48} className="text-zinc-700" />
+                      </div>
+                      <h3 className="text-xl font-black text-zinc-500">Selecione uma classe para ver a build</h3>
+                      <p className="text-sm text-zinc-600 max-w-xs">Escolha no menu à esquerda a classe e versão que deseja consultar.</p>
+                    </div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {isRosterOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsRosterOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[250]"
+            />
+            <motion.div 
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed top-0 left-0 h-full w-full md:w-[450px] bg-emerald-950/95 backdrop-blur-2xl border-r border-emerald-500/30 z-[300] shadow-2xl flex flex-col"
+            >
+              {/* Sidebar Header */}
+              <div className="p-6 border-b border-emerald-500/20 flex items-center justify-between bg-emerald-900/20">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-yellow-500/20 rounded-xl border border-yellow-500/40">
+                    <ShieldCheck className="text-yellow-500" size={24} />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-black text-white tracking-tight">Plantel/Confirmação WoE</h2>
+                    <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Leprechaun Village</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsRosterOpen(false)}
+                  className="p-2 text-emerald-500 hover:text-white hover:bg-emerald-800/40 rounded-full transition-all"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              {/* Sidebar Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {/* War Schedule Info */}
+                <div className="bg-emerald-900/30 border border-emerald-500/20 rounded-2xl p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Calendar className="text-yellow-500" size={20} />
+                    <div>
+                      <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Próxima Guerra</p>
+                      <p className="text-sm font-bold text-white">{woeSchedule.days.join(', ')} às {woeSchedule.time}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Status</p>
+                    <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-black animate-pulse">EM BREVE</span>
+                  </div>
+                </div>
+
+                {/* Roster Table */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between px-2">
+                    <h3 className="text-xs font-black text-emerald-400 uppercase tracking-widest flex items-center gap-2">
+                      <Users size={14} /> Integrantes ({roster.length})
+                    </h3>
+                    {isAdmin && (
+                      <button 
+                        onClick={() => setIsRosterAdminOpen(!isRosterAdminOpen)}
+                        className="text-[10px] font-black text-yellow-500 uppercase tracking-widest hover:underline flex items-center gap-1"
+                      >
+                        <Settings size={12} /> {isRosterAdminOpen ? 'Fechar Admin' : 'Gerenciar'}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Admin CRUD Form */}
+                  <AnimatePresence>
+                    {isAdmin && isRosterAdminOpen && (
+                      <motion.div 
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="bg-emerald-900/40 border border-yellow-500/30 rounded-2xl p-4 mb-4 space-y-4">
+                          <form onSubmit={addRosterMember} className="space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                              <input 
+                                type="text" 
+                                placeholder="Nome"
+                                value={rosterFormName}
+                                onChange={(e) => setRosterFormName(e.target.value)}
+                                className="bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                              />
+                              <input 
+                                type="text" 
+                                placeholder="Classe"
+                                value={rosterFormClass}
+                                onChange={(e) => setRosterFormClass(e.target.value)}
+                                className="bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                              />
+                            </div>
+                            <button 
+                              type="submit"
+                              className="w-full py-2 bg-emerald-500 text-white text-xs font-black rounded-lg hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2"
+                            >
+                              <Plus size={14} /> ADICIONAR AO PLANTEL
+                            </button>
+                          </form>
+
+                          <div className="pt-3 border-t border-emerald-500/20">
+                            <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Configurar Horário</p>
+                            <div className="grid grid-cols-2 gap-3">
+                              <input 
+                                type="text" 
+                                placeholder="Dias (ex: Seg, Qua)"
+                                value={woeSchedule.days.join(', ')}
+                                onChange={(e) => setWoeSchedule(prev => ({ ...prev, days: e.target.value.split(',').map(d => d.trim()) }))}
+                                className="bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                              />
+                              <input 
+                                type="time" 
+                                value={woeSchedule.time}
+                                onChange={(e) => setWoeSchedule(prev => ({ ...prev, time: e.target.value }))}
+                                className="bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <div className="bg-emerald-900/20 border border-emerald-500/10 rounded-2xl overflow-hidden">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-emerald-900/40 border-b border-emerald-500/20">
+                        <tr>
+                          <th className="px-4 py-3 font-black text-emerald-500 uppercase tracking-widest">Nome</th>
+                          <th className="px-4 py-3 font-black text-emerald-500 uppercase tracking-widest">Classe</th>
+                          <th className="px-4 py-3 font-black text-emerald-500 uppercase tracking-widest text-center">Confirmação</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-emerald-500/10">
+                        {roster.map(member => (
+                          <tr key={member.id} className="group hover:bg-emerald-800/20 transition-colors">
+                            <td className="px-4 py-3 font-bold text-white flex items-center gap-2">
+                              {isAdmin && isRosterAdminOpen && (
+                                <button 
+                                  onClick={() => deleteRosterMember(member.id)}
+                                  className="text-red-500 hover:text-red-400 transition-colors"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              )}
+                              {member.name}
+                            </td>
+                            <td className="px-4 py-3 text-emerald-300/80 font-medium italic">{member.className}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-center gap-2">
+                                <button 
+                                  onClick={() => updateConfirmation(member.id, true)}
+                                  className={`p-1.5 rounded-lg transition-all ${member.confirmed === true ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' : 'bg-emerald-900/40 text-emerald-700 hover:text-emerald-400'}`}
+                                >
+                                  <CheckCircle2 size={16} />
+                                </button>
+                                <button 
+                                  onClick={() => updateConfirmation(member.id, false)}
+                                  className={`p-1.5 rounded-lg transition-all ${member.confirmed === false ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' : 'bg-emerald-900/40 text-emerald-700 hover:text-red-400'}`}
+                                >
+                                  <XCircle size={16} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                        {roster.length === 0 && (
+                          <tr>
+                            <td colSpan={3} className="px-4 py-8 text-center text-emerald-700 font-bold italic">Nenhum integrante cadastrado.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sidebar Footer */}
+              <div className="p-6 border-t border-emerald-500/20 bg-emerald-900/20">
+                <div className="flex items-center justify-between text-[10px] font-black text-emerald-600 uppercase tracking-widest">
+                  <span>Confirmados: {roster.filter(m => m.confirmed === true).length}</span>
+                  <span>Ausentes: {roster.filter(m => m.confirmed === false).length}</span>
+                  <span>Pendentes: {roster.filter(m => m.confirmed === null).length}</span>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
       <header className="relative z-[150] bg-white/10 backdrop-blur-[2px] border-b border-white/20 px-6 py-4">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex flex-col items-center text-center md:flex-row md:text-left md:items-center gap-3">
@@ -462,6 +1205,27 @@ export default function App() {
           </div>
 
           <div className="flex items-center justify-center md:justify-end gap-3">
+            <button 
+              onClick={() => setIsBuildsOpen(true)}
+              className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all border border-emerald-500/30 shadow-lg shadow-emerald-500/10 flex items-center gap-2"
+              title="Builds das Classes"
+            >
+              <BookOpen size={20} />
+              <span className="hidden lg:inline text-xs font-black uppercase tracking-tighter">Builds</span>
+            </button>
+
+            <button 
+              onClick={() => setIsRosterOpen(true)}
+              className="p-2 rounded-lg bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500 hover:text-white transition-all border border-yellow-500/30 shadow-lg shadow-yellow-500/10 flex items-center gap-2"
+              title="Plantel WoE"
+            >
+              <div className="relative">
+                <ShieldCheck size={20} />
+                <Check size={10} className="absolute -bottom-1 -right-1 bg-emerald-500 rounded-full text-white p-0.5" />
+              </div>
+              <span className="hidden lg:inline text-xs font-black uppercase tracking-tighter">Plantel</span>
+            </button>
+
             <div className="relative">
               <button 
                 onClick={() => setIsNotifMenuOpen(!isNotifMenuOpen)}
