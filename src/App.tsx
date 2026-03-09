@@ -39,7 +39,8 @@ import {
   Search,
   Download,
   Filter,
-  Edit
+  Edit,
+  Palette
 } from 'lucide-react';
 import { RAGNAROK_EVENTS, ROEvent } from './constants';
 
@@ -111,6 +112,17 @@ export interface UtilityPost {
   createdAt: string;
 }
 
+export interface SiteSettings {
+  siteTitle: string;
+  clanIconUrl: string;
+  mainPageIconUrl: string;
+  backgroundUrl: string;
+  primaryColor: string;
+  accentColor: string;
+  fontColor: string;
+  effectsEnabled: boolean;
+}
+
 // Helper to parse time string to minutes since midnight
 const timeToMinutes = (timeStr: string) => {
   const [hours, minutes] = timeStr.split(':').map(Number);
@@ -153,13 +165,14 @@ const playNotificationSound = async () => {
 };
 
 // Glitter Effect Component for selected filters
-const GlitterEffect = () => {
+const GlitterEffect = ({ enabled = true, color = '#fbbf24' }: { enabled?: boolean, color?: string }) => {
+  if (!enabled) return null;
   return (
     <div className="absolute inset-0 pointer-events-none z-0">
       {[...Array(12)].map((_, i) => (
         <motion.div
           key={i}
-          className="absolute w-1 h-1 bg-yellow-200 rounded-full"
+          className="absolute w-1 h-1 rounded-full"
           initial={{ 
             opacity: 0, 
             scale: 0,
@@ -182,7 +195,8 @@ const GlitterEffect = () => {
           style={{
             left: "50%",
             top: "50%",
-            boxShadow: '0 0 10px 2px rgba(253, 224, 71, 0.9)',
+            backgroundColor: color,
+            boxShadow: `0 0 10px 2px ${color}`,
           }}
         />
       ))}
@@ -381,6 +395,42 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(() => {
     return localStorage.getItem('leprechaun_is_admin') === 'true';
   });
+
+  // Site Settings State
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
+    const saved = localStorage.getItem('leprechaun_site_settings');
+    if (saved) return JSON.parse(saved);
+    return {
+      siteTitle: 'Leprechaun Village',
+      clanIconUrl: 'https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png',
+      mainPageIconUrl: 'https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png',
+      backgroundUrl: '',
+      primaryColor: '#10b981', // emerald-500
+      accentColor: '#facc15', // yellow-400
+      fontColor: '#ecfdf5', // emerald-50
+      effectsEnabled: true
+    };
+  });
+
+  useEffect(() => {
+    localStorage.setItem('leprechaun_site_settings', JSON.stringify(siteSettings));
+    
+    // Update document title
+    document.title = siteSettings.siteTitle;
+    
+    // Update favicon
+    const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+    if (link) {
+      link.href = siteSettings.clanIconUrl;
+    } else {
+      const newLink = document.createElement('link');
+      newLink.rel = 'icon';
+      newLink.href = siteSettings.clanIconUrl;
+      document.head.appendChild(newLink);
+    }
+  }, [siteSettings]);
+
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [loginUser, setLoginUser] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState(false);
@@ -444,6 +494,7 @@ export default function App() {
   const [isUtilityAdminOpen, setIsUtilityAdminOpen] = useState(false);
   const [isCategoryAdminOpen, setIsCategoryAdminOpen] = useState(false);
   const [editingUtilityId, setEditingUtilityId] = useState<string | null>(null);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [utilityForm, setUtilityForm] = useState({ title: '', content: '', category: '' });
   const [newCategoryName, setNewCategoryName] = useState('');
 
@@ -813,7 +864,30 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-emerald-50 font-sans selection:bg-yellow-500/30">
+    <div className="min-h-screen bg-zinc-950 text-emerald-50 font-sans selection:bg-yellow-500/30" style={{ 
+      backgroundImage: siteSettings.backgroundUrl ? `url(${siteSettings.backgroundUrl})` : 'none',
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundAttachment: 'fixed',
+      color: siteSettings.fontColor
+    }}>
+      <style>
+        {`
+          :root {
+            --primary-rgb: ${siteSettings.primaryColor};
+            --accent-rgb: ${siteSettings.accentColor};
+          }
+          .custom-primary-text { color: ${siteSettings.primaryColor}; }
+          .custom-primary-bg { background-color: ${siteSettings.primaryColor}; }
+          .custom-primary-border { border-color: ${siteSettings.primaryColor}; }
+          .custom-accent-text { color: ${siteSettings.accentColor}; }
+          .custom-accent-bg { background-color: ${siteSettings.accentColor}; }
+          .custom-accent-border { border-color: ${siteSettings.accentColor}; }
+          
+          /* Override some common emerald/yellow classes if needed, 
+             but it's better to use these variables in the JSX */
+        `}
+      </style>
       {/* Background Layer */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         {/* Main Background GIF */}
@@ -838,44 +912,56 @@ export default function App() {
             <motion.div 
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
-              className="w-full max-w-md bg-zinc-900/80 backdrop-blur-2xl border border-emerald-500/30 rounded-3xl p-8 shadow-2xl text-center"
+              className="w-full max-w-md bg-zinc-900/80 backdrop-blur-2xl border rounded-3xl p-8 shadow-2xl text-center"
+              style={{ borderColor: `${siteSettings.primaryColor}4d` }}
             >
               <div className="flex justify-center mb-6">
-                <div className="p-3 bg-gradient-to-br from-emerald-500 to-yellow-500 rounded-full shadow-lg shadow-emerald-500/30">
+                <div 
+                  className="p-3 rounded-full shadow-lg"
+                  style={{ 
+                    background: `linear-gradient(to bottom right, ${siteSettings.primaryColor}, ${siteSettings.accentColor})`,
+                    boxShadow: `0 10px 15px -3px ${siteSettings.primaryColor}4d`
+                  }}
+                >
                   <img 
-                    src="https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png" 
-                    alt="Leprechaun Icon" 
+                    src={siteSettings.mainPageIconUrl} 
+                    alt="Site Icon" 
                     className="w-12 h-12 object-contain"
                     referrerPolicy="no-referrer"
                   />
                 </div>
               </div>
               
-              <h2 className="text-3xl font-black mb-2 bg-gradient-to-r from-emerald-400 to-yellow-400 bg-clip-text text-transparent">
-                Leprechaun Village
+              <h2 
+                className="text-3xl font-black mb-2 bg-clip-text text-transparent"
+                style={{ backgroundImage: `linear-gradient(to right, ${siteSettings.primaryColor}, ${siteSettings.accentColor})` }}
+              >
+                {siteSettings.siteTitle}
               </h2>
-              <p className="text-emerald-400/70 text-sm mb-8 font-medium">
+              <p className="text-sm mb-8 font-medium opacity-70" style={{ color: siteSettings.primaryColor }}>
                 A sorte é só um detalhe, não o todo.
               </p>
 
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="text-left">
-                  <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1.5 ml-1">Usuário</label>
+                  <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5 ml-1" style={{ color: siteSettings.primaryColor }}>Usuário</label>
                   <input 
                     type="text" 
                     value={loginUser}
                     onChange={(e) => setLoginUser(e.target.value)}
-                    className="w-full bg-emerald-900/20 border border-emerald-500/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 transition-colors"
+                    className="w-full bg-zinc-950/50 border rounded-xl px-4 py-3 text-white focus:outline-none transition-colors"
+                    style={{ borderColor: `${siteSettings.primaryColor}33` }}
                     placeholder="Seu usuário"
                   />
                 </div>
                 <div className="text-left">
-                  <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1.5 ml-1">Senha</label>
+                  <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5 ml-1" style={{ color: siteSettings.primaryColor }}>Senha</label>
                   <input 
                     type="password" 
                     value={loginPass}
                     onChange={(e) => setLoginPass(e.target.value)}
-                    className="w-full bg-emerald-900/20 border border-emerald-500/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 transition-colors"
+                    className="w-full bg-zinc-950/50 border rounded-xl px-4 py-3 text-white focus:outline-none transition-colors"
+                    style={{ borderColor: `${siteSettings.primaryColor}33` }}
                     placeholder="Sua senha"
                   />
                 </div>
@@ -892,7 +978,11 @@ export default function App() {
 
                 <button 
                   type="submit"
-                  className="w-full py-4 bg-gradient-to-r from-emerald-500 to-yellow-500 text-white font-black rounded-xl shadow-lg shadow-emerald-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-4"
+                  className="w-full py-4 text-white font-black rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 mt-4"
+                  style={{ 
+                    background: `linear-gradient(to right, ${siteSettings.primaryColor}, ${siteSettings.accentColor})`,
+                    boxShadow: `0 10px 15px -3px ${siteSettings.primaryColor}4d`
+                  }}
                 >
                   <Zap size={20} />
                   ENTRAR NA VILA
@@ -1444,6 +1534,194 @@ export default function App() {
         )}
       </AnimatePresence>
       <AnimatePresence>
+        {isSettingsOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSettingsOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[250]"
+            />
+            <motion.div 
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed top-0 right-0 h-full w-full md:w-[450px] bg-zinc-950/95 backdrop-blur-2xl border-l border-white/10 z-[300] shadow-2xl flex flex-col"
+            >
+              {/* Sidebar Header */}
+              <div className="p-6 border-b border-white/10 flex items-center justify-between bg-white/5">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-emerald-500/20 rounded-xl border border-emerald-500/40">
+                    <Palette className="text-emerald-500" size={24} />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-black text-white tracking-tight">Identidade Visual</h2>
+                    <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">Personalização Global</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsSettingsOpen(false)}
+                  className="p-2 text-zinc-500 hover:text-white hover:bg-white/10 rounded-full transition-all"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              {/* Sidebar Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+                {/* Site Info */}
+                <div className="space-y-4">
+                  <h3 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest border-b border-emerald-500/20 pb-2">Informações Básicas</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">Título do Site</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.siteTitle}
+                        onChange={(e) => setSiteSettings({...siteSettings, siteTitle: e.target.value})}
+                        className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">URL do Ícone do Clã (Favicon/Header)</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.clanIconUrl}
+                        onChange={(e) => setSiteSettings({...siteSettings, clanIconUrl: e.target.value})}
+                        className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">URL do Ícone Principal (Pedra/Centro)</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.mainPageIconUrl}
+                        onChange={(e) => setSiteSettings({...siteSettings, mainPageIconUrl: e.target.value})}
+                        className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Background & Colors */}
+                <div className="space-y-4">
+                  <h3 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest border-b border-emerald-500/20 pb-2">Cores & Estilo</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">URL do Background da Página</label>
+                      <input 
+                        type="text" 
+                        value={siteSettings.backgroundUrl}
+                        onChange={(e) => setSiteSettings({...siteSettings, backgroundUrl: e.target.value})}
+                        className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+                        placeholder="Deixe vazio para o padrão escuro"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">Cor Primária</label>
+                        <div className="flex gap-2">
+                          <input 
+                            type="color" 
+                            value={siteSettings.primaryColor}
+                            onChange={(e) => setSiteSettings({...siteSettings, primaryColor: e.target.value})}
+                            className="w-10 h-10 bg-zinc-900 border border-white/10 rounded-lg cursor-pointer"
+                          />
+                          <input 
+                            type="text" 
+                            value={siteSettings.primaryColor}
+                            onChange={(e) => setSiteSettings({...siteSettings, primaryColor: e.target.value})}
+                            className="flex-1 bg-zinc-900 border border-white/10 rounded-lg px-3 text-xs text-white uppercase"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">Cor de Destaque</label>
+                        <div className="flex gap-2">
+                          <input 
+                            type="color" 
+                            value={siteSettings.accentColor}
+                            onChange={(e) => setSiteSettings({...siteSettings, accentColor: e.target.value})}
+                            className="w-10 h-10 bg-zinc-900 border border-white/10 rounded-lg cursor-pointer"
+                          />
+                          <input 
+                            type="text" 
+                            value={siteSettings.accentColor}
+                            onChange={(e) => setSiteSettings({...siteSettings, accentColor: e.target.value})}
+                            className="flex-1 bg-zinc-900 border border-white/10 rounded-lg px-3 text-xs text-white uppercase"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">Cor da Fonte Global</label>
+                      <div className="flex gap-2">
+                        <input 
+                          type="color" 
+                          value={siteSettings.fontColor}
+                          onChange={(e) => setSiteSettings({...siteSettings, fontColor: e.target.value})}
+                          className="w-10 h-10 bg-zinc-900 border border-white/10 rounded-lg cursor-pointer"
+                        />
+                        <input 
+                          type="text" 
+                          value={siteSettings.fontColor}
+                          onChange={(e) => setSiteSettings({...siteSettings, fontColor: e.target.value})}
+                          className="flex-1 bg-zinc-900 border border-white/10 rounded-lg px-3 text-xs text-white uppercase"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Effects */}
+                <div className="space-y-4">
+                  <h3 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest border-b border-emerald-500/20 pb-2">Efeitos & Extras</h3>
+                  <label className="flex items-center justify-between p-3 bg-zinc-900/50 rounded-xl border border-white/5 cursor-pointer group">
+                    <div className="flex items-center gap-3">
+                      <Sparkles size={18} className="text-emerald-500" />
+                      <div>
+                        <p className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">Efeitos Visuais</p>
+                        <p className="text-[10px] text-zinc-500">Partículas e animações de brilho</p>
+                      </div>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      checked={siteSettings.effectsEnabled}
+                      onChange={(e) => setSiteSettings({...siteSettings, effectsEnabled: e.target.checked})}
+                      className="w-5 h-5 rounded border-zinc-700 bg-zinc-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-950"
+                    />
+                  </label>
+                </div>
+
+                <div className="pt-6">
+                  <button 
+                    onClick={() => {
+                      if (confirm('Deseja resetar para as configurações padrão?')) {
+                        setSiteSettings({
+                          siteTitle: 'Leprechaun Village',
+                          clanIconUrl: 'https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png',
+                          mainPageIconUrl: 'https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png',
+                          backgroundUrl: '',
+                          primaryColor: '#10b981',
+                          accentColor: '#facc15',
+                          fontColor: '#ecfdf5',
+                          effectsEnabled: true
+                        });
+                      }
+                    }}
+                    className="w-full py-3 border border-red-500/30 text-red-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all"
+                  >
+                    Resetar Identidade
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
         {isUtilitiesOpen && (
           <>
             <motion.div 
@@ -1463,22 +1741,24 @@ export default function App() {
               {/* Sidebar Header */}
               <div className="p-6 border-b border-emerald-500/20 flex items-center justify-between bg-emerald-900/10">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-emerald-500/20 rounded-xl border border-emerald-500/40">
-                    <FileText className="text-emerald-500" size={24} />
+                  <div className="p-2 rounded-xl border" style={{ backgroundColor: `${siteSettings.primaryColor}33`, borderColor: `${siteSettings.primaryColor}66` }}>
+                    <FileText style={{ color: siteSettings.primaryColor }} size={24} />
                   </div>
                   <div>
                     <h2 className="text-xl font-black text-white tracking-tight">Utilities & Blog</h2>
-                    <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Guias e Informações Úteis</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: siteSettings.primaryColor }}>Guias e Informações Úteis</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button 
-                    onClick={exportUtilitiesToExcel}
-                    className="p-2 text-emerald-500 hover:text-white hover:bg-emerald-800/40 rounded-full transition-all"
-                    title="Exportar para Excel (CSV)"
-                  >
-                    <Download size={20} />
-                  </button>
+                  {isAdmin && (
+                    <button 
+                      onClick={exportUtilitiesToExcel}
+                      className="p-2 text-emerald-500 hover:text-white hover:bg-emerald-800/40 rounded-full transition-all"
+                      title="Exportar para Excel (CSV)"
+                    >
+                      <Download size={20} />
+                    </button>
+                  )}
                   <button 
                     onClick={() => setIsUtilitiesOpen(false)}
                     className="p-2 text-emerald-500 hover:text-white hover:bg-emerald-800/40 rounded-full transition-all"
@@ -1491,27 +1771,33 @@ export default function App() {
               {/* Sidebar Content */}
               <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
                 {/* Search and Filter */}
-                <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex gap-3 items-center bg-zinc-900/50 p-2 rounded-2xl border border-white/5">
                   <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
+                    <Search className={`absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${isSearchFocused ? 'text-emerald-500' : 'text-zinc-500'}`} size={16} />
                     <input 
                       type="text" 
-                      placeholder="Pesquisar postagens..."
+                      placeholder="Pesquisar..."
                       value={utilitySearch}
                       onChange={(e) => setUtilitySearch(e.target.value)}
-                      className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+                      onFocus={() => setIsSearchFocused(true)}
+                      onBlur={() => setIsSearchFocused(false)}
+                      className={`w-full bg-zinc-950 border rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none transition-all ${isSearchFocused ? 'border-emerald-500 ring-2 ring-emerald-500/20' : 'border-white/10'}`}
                     />
                   </div>
-                  <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0 no-scrollbar">
-                    {allCategories.map(cat => (
-                      <button
-                        key={cat}
-                        onClick={() => setUtilityCategory(cat)}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all shrink-0 ${utilityCategory === cat ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-zinc-900 text-zinc-500 hover:text-emerald-400'}`}
-                      >
-                        {cat}
-                      </button>
-                    ))}
+                  <div className="relative min-w-[120px]">
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                      <Filter size={14} style={{ color: siteSettings.primaryColor }} />
+                    </div>
+                    <select
+                      value={utilityCategory}
+                      onChange={(e) => setUtilityCategory(e.target.value)}
+                      className="w-full bg-zinc-950 border border-white/10 rounded-xl pl-9 pr-3 py-2 text-[10px] font-black uppercase tracking-widest focus:outline-none appearance-none cursor-pointer"
+                      style={{ color: siteSettings.primaryColor, borderColor: `${siteSettings.primaryColor}33` }}
+                    >
+                      {allCategories.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -1604,7 +1890,12 @@ export default function App() {
                         }
                       }
                     }}
-                    className="w-full py-3 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-emerald-500 font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center gap-2"
+                    className="w-full py-3 rounded-2xl font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 border hover:bg-white hover:text-black"
+                    style={{ 
+                      backgroundColor: `${siteSettings.primaryColor}1a`, 
+                      borderColor: `${siteSettings.primaryColor}4d`,
+                      color: siteSettings.primaryColor
+                    }}
                   >
                     <Plus size={18} /> {isUtilityAdminOpen ? (editingUtilityId ? 'Cancelar Edição' : 'Fechar Editor') : 'Nova Postagem'}
                   </button>
@@ -1784,19 +2075,20 @@ export default function App() {
               className="fixed top-0 left-0 h-full w-full md:w-[450px] bg-emerald-950/95 backdrop-blur-2xl border-r border-emerald-500/30 z-[300] shadow-2xl flex flex-col"
             >
               {/* Sidebar Header */}
-              <div className="p-6 border-b border-emerald-500/20 flex items-center justify-between bg-emerald-900/20">
+              <div className="p-6 border-b flex items-center justify-between" style={{ borderColor: `${siteSettings.primaryColor}33`, backgroundColor: `${siteSettings.primaryColor}1a` }}>
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-yellow-500/20 rounded-xl border border-yellow-500/40">
-                    <ShieldCheck className="text-yellow-500" size={24} />
+                  <div className="p-2 rounded-xl border" style={{ backgroundColor: `${siteSettings.accentColor}33`, borderColor: `${siteSettings.accentColor}66` }}>
+                    <ShieldCheck style={{ color: siteSettings.accentColor }} size={24} />
                   </div>
                   <div>
                     <h2 className="text-xl font-black text-white tracking-tight">Plantel/Confirmação WoE</h2>
-                    <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Leprechaun Village</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: siteSettings.primaryColor }}>{siteSettings.siteTitle}</p>
                   </div>
                 </div>
                 <button 
                   onClick={() => setIsRosterOpen(false)}
-                  className="p-2 text-emerald-500 hover:text-white hover:bg-emerald-800/40 rounded-full transition-all"
+                  className="p-2 hover:text-white rounded-full transition-all"
+                  style={{ color: siteSettings.primaryColor }}
                 >
                   <X size={24} />
                 </button>
@@ -1854,13 +2146,15 @@ export default function App() {
                         <div className="flex items-center gap-2 mb-4 p-1 bg-emerald-900/40 rounded-xl border border-emerald-500/10">
                           <button 
                             onClick={() => setAdminTab('roster')}
-                            className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${adminTab === 'roster' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-emerald-500/60 hover:text-emerald-400'}`}
+                            className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${adminTab === 'roster' ? 'text-white shadow-lg' : 'opacity-60 hover:opacity-100'}`}
+                            style={adminTab === 'roster' ? { backgroundColor: siteSettings.primaryColor, boxShadow: `0 4px 6px -1px ${siteSettings.primaryColor}33` } : { color: siteSettings.primaryColor }}
                           >
                             Plantel
                           </button>
                           <button 
                             onClick={() => setAdminTab('users')}
-                            className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${adminTab === 'users' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-emerald-500/60 hover:text-emerald-400'}`}
+                            className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${adminTab === 'users' ? 'text-white shadow-lg' : 'opacity-60 hover:opacity-100'}`}
+                            style={adminTab === 'users' ? { backgroundColor: siteSettings.primaryColor, boxShadow: `0 4px 6px -1px ${siteSettings.primaryColor}33` } : { color: siteSettings.primaryColor }}
                           >
                             Usuários
                           </button>
@@ -2214,28 +2508,37 @@ export default function App() {
       <header className="relative z-[150] bg-white/10 backdrop-blur-[2px] border-b border-white/20 px-6 py-4">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex flex-col items-center text-center md:flex-row md:text-left md:items-center gap-3">
-            <div className="p-1.5 bg-gradient-to-br from-emerald-500 to-yellow-500 rounded-full shadow-lg shadow-emerald-500/30">
+            <div 
+              className="p-1.5 rounded-full shadow-lg"
+              style={{ 
+                background: `linear-gradient(to bottom right, ${siteSettings.primaryColor}, ${siteSettings.accentColor})`,
+                boxShadow: `0 10px 15px -3px ${siteSettings.primaryColor}4d`
+              }}
+            >
               <img 
-                src="https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png" 
-                alt="Leprechaun Icon" 
+                src={siteSettings.clanIconUrl} 
+                alt="Clan Icon" 
                 className="w-10 h-10 object-contain animate-pulse"
                 referrerPolicy="no-referrer"
               />
             </div>
             <div>
-              <h1 className="text-xl md:text-2xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-yellow-400 to-emerald-400 bg-clip-text text-transparent">
-                Leprechaun Village
+              <h1 
+                className="text-xl md:text-2xl font-black tracking-tight bg-clip-text text-transparent"
+                style={{ backgroundImage: `linear-gradient(to right, ${siteSettings.primaryColor}, ${siteSettings.accentColor}, ${siteSettings.primaryColor})` }}
+              >
+                {siteSettings.siteTitle}
               </h1>
-              <p className="text-xs text-emerald-400/70 font-mono flex flex-wrap items-center justify-center md:justify-start gap-2">
+              <p className="text-xs font-mono flex flex-wrap items-center justify-center md:justify-start gap-2" style={{ color: `${siteSettings.primaryColor}b3` }}>
                 <span className="flex items-center gap-2">
-                  <Coins size={12} className="text-yellow-500" />
+                  <Coins size={12} style={{ color: siteSettings.accentColor }} />
                   SERVER TIME: {currentTime.toLocaleTimeString()}
                 </span>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter flex items-center gap-1 ${
                   notificationsEnabled && soundEnabled 
-                  ? 'bg-emerald-500/20 text-emerald-400 animate-pulse' 
+                  ? 'animate-pulse' 
                   : 'bg-red-500/20 text-red-400'
-                }`}>
+                }`} style={notificationsEnabled && soundEnabled ? { backgroundColor: `${siteSettings.primaryColor}33`, color: siteSettings.primaryColor } : {}}>
                   <Zap size={10} />
                   {notificationsEnabled && soundEnabled ? 'Notificações Ativas' : 'Alertas Desligados'}
                 </span>
@@ -2252,6 +2555,17 @@ export default function App() {
               <FileText size={20} />
               <span className="hidden lg:inline text-xs font-black uppercase tracking-tighter">Utilities</span>
             </button>
+
+            {isAdmin && (
+              <button 
+                onClick={() => setIsSettingsOpen(true)}
+                className="p-2 rounded-lg bg-zinc-500/20 text-zinc-400 hover:bg-zinc-500 hover:text-white transition-all border border-zinc-500/30 shadow-lg shadow-zinc-500/10 flex items-center gap-2"
+                title="Identidade Visual"
+              >
+                <Palette size={20} />
+                <span className="hidden lg:inline text-xs font-black uppercase tracking-tighter">Design</span>
+              </button>
+            )}
 
             <button 
               onClick={() => setIsBuildsOpen(true)}
@@ -2367,9 +2681,10 @@ export default function App() {
         {/* Magic Stone Decorative Section */}
         <div className="flex justify-center mb-6">
           <img 
-            src="https://i.pinimg.com/originals/3f/05/d8/3f05d83924eef0ed0561fa2352a7b9d4.gif" 
+            src={siteSettings.mainPageIconUrl} 
             alt="Magic Stone" 
-            className="w-32 h-32 object-contain drop-shadow-[0_0_15px_rgba(16,185,129,0.4)]"
+            className="w-32 h-32 object-contain"
+            style={{ filter: `drop-shadow(0 0 15px ${siteSettings.primaryColor}66)` }}
             referrerPolicy="no-referrer"
           />
         </div>
@@ -2385,11 +2700,16 @@ export default function App() {
               onClick={() => setSelectedCategory(cat)}
               className={`relative px-4 py-1.5 rounded-full text-sm font-bold transition-all backdrop-blur-md border ${
                 selectedCategory === cat 
-                ? 'bg-gradient-to-r from-emerald-500 to-yellow-500 text-white shadow-md shadow-emerald-500/20 border-emerald-400' 
-                : 'bg-emerald-950/70 text-emerald-400 border-emerald-500/30 hover:bg-emerald-900/80 hover:text-white'
+                ? 'text-white shadow-md' 
+                : 'bg-zinc-950/70 border-white/10 hover:bg-zinc-900/80 hover:text-white'
               }`}
+              style={selectedCategory === cat ? { 
+                background: `linear-gradient(to right, ${siteSettings.primaryColor}, ${siteSettings.accentColor})`,
+                boxShadow: `0 4px 6px -1px ${siteSettings.primaryColor}33`,
+                borderColor: siteSettings.accentColor
+              } : { color: `${siteSettings.primaryColor}cc` }}
             >
-              {selectedCategory === cat && <GlitterEffect />}
+              {selectedCategory === cat && <GlitterEffect enabled={siteSettings.effectsEnabled} color={siteSettings.accentColor} />}
               <span className="relative z-10">{cat}</span>
             </button>
           ))}
@@ -2404,9 +2724,10 @@ export default function App() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.05 }}
-              className={`group relative bg-white/10 backdrop-blur-[2px] border border-white/20 rounded-2xl p-5 hover:border-yellow-500/40 hover:bg-white/20 transition-all overflow-hidden ${
-                instance.diff <= 10 ? 'ring-2 ring-emerald-500/30' : ''
+              className={`group relative bg-white/10 backdrop-blur-[2px] border border-white/20 rounded-2xl p-5 hover:bg-white/20 transition-all overflow-hidden ${
+                instance.diff <= 10 ? 'ring-2' : ''
               }`}
+              style={instance.diff <= 10 ? { ringColor: `${siteSettings.primaryColor}4d`, borderColor: siteSettings.accentColor } : {}}
             >
               {/* Shine effect on hover */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
@@ -2414,7 +2735,10 @@ export default function App() {
               </div>
 
               {/* Gold top border on hover */}
-              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-yellow-500 to-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity rounded-t-2xl" />
+              <div 
+                className="absolute top-0 left-0 right-0 h-1 opacity-0 group-hover:opacity-100 transition-opacity rounded-t-2xl" 
+                style={{ background: `linear-gradient(to right, ${siteSettings.primaryColor}, ${siteSettings.accentColor}, ${siteSettings.primaryColor})` }}
+              />
               
               {/* Delete button for custom events */}
               {instance.isCustom && (
@@ -2440,7 +2764,10 @@ export default function App() {
 
               <div className="mb-4 flex flex-col items-center text-center md:items-start md:text-left">
                 <div className="flex flex-col items-center md:flex-row md:items-baseline md:gap-2 mb-1">
-                  <span className="text-3xl font-black font-mono bg-gradient-to-br from-white to-emerald-400 bg-clip-text text-transparent tracking-tighter">
+                  <span 
+                    className="text-3xl font-black font-mono bg-clip-text text-transparent tracking-tighter"
+                    style={{ backgroundImage: `linear-gradient(to bottom right, #fff, ${siteSettings.primaryColor})` }}
+                  >
                     {instance.time}
                   </span>
                   <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase mt-1 md:mt-0 ${
@@ -2595,14 +2922,14 @@ export default function App() {
       </AnimatePresence>
 
       {/* Footer Info */}
-      <footer className="max-w-6xl mx-auto px-6 py-12 border-t border-emerald-500/30 mt-12 bg-emerald-950/70 backdrop-blur-md rounded-t-3xl">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-10 text-sm text-emerald-50/80 text-center md:text-left">
+      <footer className="max-w-6xl mx-auto px-6 py-12 border-t mt-12 backdrop-blur-md rounded-t-3xl" style={{ borderColor: `${siteSettings.primaryColor}33`, backgroundColor: `${siteSettings.primaryColor}0d` }}>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-10 text-sm text-center md:text-left" style={{ color: `${siteSettings.fontColor}cc` }}>
           <div className="flex flex-col items-center md:items-start">
-            <h4 className="text-emerald-400 font-bold mb-3 uppercase tracking-wider text-xs">Sobre o App</h4>
-            <p className="leading-relaxed max-w-xs md:max-w-none">Sincronizado com o horário do servidor. Alertas automáticos 2 minutos antes de cada evento para você não perder nenhum drop da sorte.</p>
+            <h4 className="font-bold mb-3 uppercase tracking-wider text-xs" style={{ color: siteSettings.primaryColor }}>Sobre o App</h4>
+            <p className="leading-relaxed max-w-xs md:max-w-none opacity-70">Sincronizado com o horário do servidor. Alertas automáticos 2 minutos antes de cada evento para você não perder nenhum drop da sorte.</p>
           </div>
           <div className="flex flex-col items-center md:items-start">
-            <h4 className="text-emerald-400 font-bold mb-3 uppercase tracking-wider text-xs">Legenda da Sorte</h4>
+            <h4 className="font-bold mb-3 uppercase tracking-wider text-xs" style={{ color: siteSettings.primaryColor }}>Legenda da Sorte</h4>
             <ul className="space-y-3">
               <li className="flex items-center justify-center md:justify-start gap-2">
                 <Sword size={14} className="text-red-400" /> 
@@ -2618,23 +2945,23 @@ export default function App() {
               </li>
               <li className="flex items-center justify-center md:justify-start gap-2">
                 <img 
-                  src="https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png" 
-                  alt="Leprechaun Icon" 
+                  src={siteSettings.mainPageIconUrl} 
+                  alt="Site Icon" 
                   className="w-4 h-4 object-contain"
                   referrerPolicy="no-referrer"
                 /> 
-                <span className="text-emerald-400 font-bold underline underline-offset-4 decoration-emerald-400/30">Leprechaun - Eventos Especiais</span>
+                <span style={{ color: siteSettings.primaryColor }} className="font-bold underline underline-offset-4 decoration-current">Leprechaun - Eventos Especiais</span>
               </li>
             </ul>
           </div>
           <div className="flex flex-col items-center md:items-start">
-            <h4 className="text-emerald-400 font-bold mb-3 uppercase tracking-wider text-xs">Configurações</h4>
-            <p className="leading-relaxed max-w-xs md:max-w-none">Ative as notificações do navegador para receber alertas mesmo com a aba em segundo plano. Que a sorte esteja com você!</p>
+            <h4 className="font-bold mb-3 uppercase tracking-wider text-xs" style={{ color: siteSettings.primaryColor }}>Configurações</h4>
+            <p className="leading-relaxed max-w-xs md:max-w-none opacity-70">Ative as notificações do navegador para receber alertas mesmo com a aba em segundo plano. Que a sorte esteja com você!</p>
           </div>
         </div>
-        <div className="mt-12 pt-8 border-t border-emerald-500/20 text-center text-xs text-emerald-400 font-medium space-y-2">
-          <p>&copy; 2026 Ragnarok Event Tracker - Leprechaun Sorte Edition.</p>
-          <p className="text-emerald-500/60 tracking-widest uppercase text-[10px]">Desenvolvido por <span className="text-emerald-400 font-black">Nolei creative</span></p>
+        <div className="mt-12 pt-8 border-t text-center text-xs font-medium space-y-2" style={{ borderColor: `${siteSettings.primaryColor}1a`, color: siteSettings.primaryColor }}>
+          <p>&copy; 2026 {siteSettings.siteTitle} - Ragnarok Edition.</p>
+          <p className="tracking-widest uppercase text-[10px] opacity-40">Desenvolvido por <span className="font-black">Nolei creative</span></p>
         </div>
       </footer>
 
