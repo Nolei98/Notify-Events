@@ -80,6 +80,7 @@ export interface RosterMember {
   id: string;
   name: string;
   className: string;
+  version?: string;
   confirmed: boolean | null;
 }
 
@@ -263,6 +264,7 @@ export default function App() {
   const [isRosterAdminOpen, setIsRosterAdminOpen] = useState(false);
   const [rosterFormName, setRosterFormName] = useState('');
   const [rosterFormClass, setRosterFormClass] = useState('');
+  const [rosterFormVersion, setRosterFormVersion] = useState('');
 
   // Builds State
   const [isBuildsOpen, setIsBuildsOpen] = useState(false);
@@ -392,6 +394,8 @@ export default function App() {
 
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const [editingClass, setEditingClass] = useState('');
+  const [editingVersion, setEditingVersion] = useState('');
 
   // Roster CRUD
   const addRosterMember = (e: React.FormEvent) => {
@@ -401,11 +405,13 @@ export default function App() {
       id: Date.now().toString(),
       name: rosterFormName.trim() || '',
       className: rosterFormClass,
+      version: rosterFormVersion.trim() || 'Default',
       confirmed: null
     };
     setRoster(prev => [...prev, newMember]);
     setRosterFormName('');
     setRosterFormClass('');
+    setRosterFormVersion('');
   };
 
   const deleteRosterMember = (id: string) => {
@@ -414,6 +420,11 @@ export default function App() {
 
   const updateRosterMemberName = (id: string, newName: string) => {
     setRoster(prev => prev.map(m => m.id === id ? { ...m, name: newName } : m));
+    setEditingMemberId(null);
+  };
+
+  const updateRosterMemberClass = (id: string, newClass: string, newVersion: string) => {
+    setRoster(prev => prev.map(m => m.id === id ? { ...m, className: newClass, version: newVersion } : m));
     setEditingMemberId(null);
   };
 
@@ -1364,18 +1375,34 @@ export default function App() {
                           <div className="bg-emerald-900/40 border border-yellow-500/30 rounded-2xl p-4 space-y-3">
                             <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Adicionar Integrante</p>
                             <form onSubmit={addRosterMember} className="space-y-3">
-                              <div className="grid grid-cols-2 gap-3">
-                                <div className="relative">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="space-y-3">
+                                  <div className="relative">
+                                    <input 
+                                      type="text" 
+                                      placeholder="Classe"
+                                      list="roster-classes"
+                                      value={rosterFormClass}
+                                      onChange={(e) => setRosterFormClass(e.target.value)}
+                                      className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                                    />
+                                    <datalist id="roster-classes">
+                                      {availableClasses.map(c => <option key={c} value={c} />)}
+                                    </datalist>
+                                  </div>
                                   <input 
                                     type="text" 
-                                    placeholder="Classe"
-                                    list="roster-classes"
-                                    value={rosterFormClass}
-                                    onChange={(e) => setRosterFormClass(e.target.value)}
+                                    placeholder="Versão (ex: Default)"
+                                    value={rosterFormVersion}
+                                    onChange={(e) => setRosterFormVersion(e.target.value)}
                                     className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                                    list="roster-versions"
                                   />
-                                  <datalist id="roster-classes">
-                                    {availableClasses.map(c => <option key={c} value={c} />)}
+                                  <datalist id="roster-versions">
+                                    {builds.filter(b => b.className.toLowerCase() === rosterFormClass.toLowerCase()).map(b => (
+                                      <option key={b.id} value={b.version} />
+                                    ))}
+                                    <option value="Default" />
                                   </datalist>
                                 </div>
                                 <input 
@@ -1383,7 +1410,7 @@ export default function App() {
                                   placeholder="Nome (Opcional)"
                                   value={rosterFormName}
                                   onChange={(e) => setRosterFormName(e.target.value)}
-                                  className="bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                                  className="bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500 h-full"
                                 />
                               </div>
                               <button 
@@ -1433,91 +1460,167 @@ export default function App() {
                     )}
                   </AnimatePresence>
 
-                  <div className="bg-emerald-900/20 border border-emerald-500/10 rounded-2xl overflow-hidden">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-emerald-900/40 border-b border-emerald-500/20">
-                        <tr>
-                          <th className="px-4 py-3 font-black text-emerald-500 uppercase tracking-widest w-12 text-center">#</th>
-                          <th className="px-4 py-3 font-black text-emerald-500 uppercase tracking-widest">Classe</th>
-                          <th className="px-4 py-3 font-black text-emerald-500 uppercase tracking-widest">Nome</th>
-                          <th className="px-4 py-3 font-black text-emerald-500 uppercase tracking-widest text-center">Confirmação</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-emerald-500/10">
-                        {roster.map((member, index) => (
-                          <tr key={member.id} className="group hover:bg-emerald-800/20 transition-colors">
-                            <td className="px-4 py-3 text-emerald-700 font-black text-center">{index + 1}</td>
-                            <td className="px-4 py-3 text-emerald-300/80 font-medium italic">{member.className}</td>
-                            <td className="px-4 py-3 font-bold text-white">
+                  <div className="space-y-3">
+                    {roster.map((member, index) => (
+                      <motion.div 
+                        key={member.id}
+                        layout
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className={`p-4 rounded-2xl border transition-all ${editingMemberId === member.id ? 'bg-emerald-900/40 border-yellow-500/40 shadow-lg' : 'bg-emerald-900/20 border-emerald-500/10 hover:border-emerald-500/30'}`}
+                      >
+                        {editingMemberId === member.id ? (
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between border-b border-emerald-500/10 pb-2 mb-2">
+                              <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Editando Integrante #{index + 1}</span>
                               <div className="flex items-center gap-2">
-                                {isAdmin && isRosterAdminOpen && (
-                                  <div className="flex items-center gap-1">
+                                <button 
+                                  onClick={() => deleteRosterMember(member.id)}
+                                  className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                                  title="Excluir"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                                <button 
+                                  onClick={() => setEditingMemberId(null)}
+                                  className="p-1.5 text-zinc-500 hover:bg-white/5 rounded-lg transition-colors"
+                                  title="Cancelar"
+                                >
+                                  <X size={16} />
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    updateRosterMemberName(member.id, editingName);
+                                    updateRosterMemberClass(member.id, editingClass, editingVersion);
+                                  }}
+                                  className="p-1.5 bg-emerald-500 text-white rounded-lg shadow-lg shadow-emerald-500/20 hover:bg-emerald-400 transition-colors"
+                                  title="Salvar"
+                                >
+                                  <Check size={16} />
+                                </button>
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 gap-3">
+                              <div className="space-y-1">
+                                <label className="text-[8px] font-black text-emerald-600 uppercase ml-1">Classe</label>
+                                <input 
+                                  autoFocus
+                                  type="text"
+                                  value={editingClass}
+                                  onChange={(e) => setEditingClass(e.target.value)}
+                                  className="w-full bg-emerald-950 border border-emerald-500/20 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-yellow-500"
+                                  list="roster-classes"
+                                  placeholder="Classe"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[8px] font-black text-emerald-600 uppercase ml-1">Versão</label>
+                                <input 
+                                  type="text"
+                                  value={editingVersion}
+                                  onChange={(e) => setEditingVersion(e.target.value)}
+                                  className="w-full bg-emerald-950 border border-emerald-500/20 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-yellow-500"
+                                  list="roster-versions-edit"
+                                  placeholder="Versão"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[8px] font-black text-emerald-600 uppercase ml-1">Nome do Jogador</label>
+                                <input 
+                                  type="text"
+                                  value={editingName}
+                                  onChange={(e) => setEditingName(e.target.value)}
+                                  className="w-full bg-emerald-950 border border-emerald-500/20 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-yellow-500"
+                                  placeholder="Nome"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-4 flex-1 min-w-0">
+                              <div className="w-8 h-8 rounded-full bg-emerald-900/40 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                                <span className="text-[10px] font-black text-emerald-500">{index + 1}</span>
+                              </div>
+                              
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                                  <span className="text-sm font-black text-white truncate">{member.name || 'Sem Nome'}</span>
+                                  {isAdmin && isRosterAdminOpen && (
                                     <button 
-                                      onClick={() => deleteRosterMember(member.id)}
-                                      className="text-red-500 hover:text-red-400 transition-colors p-1"
-                                      title="Excluir"
+                                      onClick={() => {
+                                        setEditingMemberId(member.id);
+                                        setEditingName(member.name);
+                                        setEditingClass(member.className);
+                                        setEditingVersion(member.version || 'Default');
+                                      }}
+                                      className="p-1 text-yellow-500 hover:bg-yellow-500/10 rounded transition-colors"
                                     >
-                                      <Trash2 size={12} />
+                                      <Settings size={12} />
                                     </button>
-                                    {editingMemberId === member.id ? (
-                                      <div className="flex items-center gap-1">
-                                        <input 
-                                          autoFocus
-                                          type="text"
-                                          value={editingName}
-                                          onChange={(e) => setEditingName(e.target.value)}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') updateRosterMemberName(member.id, editingName);
-                                            if (e.key === 'Escape') setEditingMemberId(null);
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 text-[10px] font-bold italic text-emerald-400/60">
+                                  <span>{member.className}</span>
+                                  {member.version && member.version !== 'Default' && (
+                                    <span className="bg-emerald-500/10 px-1 rounded border border-emerald-500/20">
+                                      {member.version}
+                                    </span>
+                                  )}
+                                  {/* Link to Build if exists */}
+                                  {(() => {
+                                    const classBuild = builds.find(b => 
+                                      b.className.toLowerCase() === member.className.toLowerCase() && 
+                                      (b.version?.toLowerCase() === member.version?.toLowerCase() || (!b.version && member.version === 'Default'))
+                                    );
+                                    if (classBuild) {
+                                      return (
+                                        <button 
+                                          onClick={() => {
+                                            setSelectedBuildId(classBuild.id);
+                                            setIsBuildsOpen(true);
+                                            setIsRosterOpen(false);
                                           }}
-                                          onBlur={() => updateRosterMemberName(member.id, editingName)}
-                                          className="bg-emerald-950 border border-yellow-500/50 rounded px-1 py-0.5 text-[10px] w-24 outline-none"
-                                        />
-                                      </div>
-                                    ) : (
-                                      <button 
-                                        onClick={() => {
-                                          setEditingMemberId(member.id);
-                                          setEditingName(member.name);
-                                        }}
-                                        className="text-yellow-500 hover:text-yellow-400 transition-colors p-1"
-                                        title="Editar Nome"
-                                      >
-                                        <Settings size={12} />
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-                                <span className="truncate">
-                                  {member.name || <span className="text-emerald-500/50 font-black">~</span>}
-                                </span>
+                                          className="text-emerald-500 hover:text-white transition-colors flex items-center gap-1"
+                                          title="Ver Build"
+                                        >
+                                          <BookOpen size={10} />
+                                          <span className="text-[8px] uppercase tracking-tighter">Build</span>
+                                        </button>
+                                      );
+                                    }
+                                    return null;
+                                  })()}
+                                </div>
                               </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center justify-center gap-2">
-                                <button 
-                                  onClick={() => updateConfirmation(member.id, true)}
-                                  className={`p-1.5 rounded-lg transition-all ${member.confirmed === true ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' : 'bg-emerald-900/40 text-emerald-700 hover:text-emerald-400'}`}
-                                >
-                                  <CheckCircle2 size={16} />
-                                </button>
-                                <button 
-                                  onClick={() => updateConfirmation(member.id, false)}
-                                  className={`p-1.5 rounded-lg transition-all ${member.confirmed === false ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' : 'bg-emerald-900/40 text-emerald-700 hover:text-red-400'}`}
-                                >
-                                  <XCircle size={16} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                        {roster.length === 0 && (
-                          <tr>
-                            <td colSpan={3} className="px-4 py-8 text-center text-emerald-700 font-bold italic">Nenhum integrante cadastrado.</td>
-                          </tr>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button 
+                                onClick={() => updateConfirmation(member.id, true)}
+                                className={`p-2 rounded-xl transition-all ${member.confirmed === true ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30' : 'bg-emerald-900/40 text-emerald-700 hover:text-emerald-400'}`}
+                                title="Confirmar Presença"
+                              >
+                                <CheckCircle2 size={18} />
+                              </button>
+                              <button 
+                                onClick={() => updateConfirmation(member.id, false)}
+                                className={`p-2 rounded-xl transition-all ${member.confirmed === false ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' : 'bg-emerald-900/40 text-emerald-700 hover:text-red-400'}`}
+                                title="Recusar Presença"
+                              >
+                                <XCircle size={18} />
+                              </button>
+                            </div>
+                          </div>
                         )}
-                      </tbody>
-                    </table>
+                      </motion.div>
+                    ))}
+                    {roster.length === 0 && (
+                      <div className="p-8 text-center bg-emerald-900/20 border border-emerald-500/10 rounded-2xl text-emerald-700 font-bold italic">
+                        Nenhum integrante cadastrado.
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
