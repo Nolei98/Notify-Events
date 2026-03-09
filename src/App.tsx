@@ -142,6 +142,30 @@ export default function App() {
   const [formCategory, setFormCategory] = useState<ROEvent['category']>('Special');
   const [showScrollTop, setShowScrollTop] = useState(false);
 
+  // Login State
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return localStorage.getItem('leprechaun_logged_in') === 'true';
+  });
+  const [loginUser, setLoginUser] = useState('');
+  const [loginPass, setLoginPass] = useState('');
+  const [loginError, setLoginError] = useState(false);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (loginUser === 'player' && loginPass === '1234') {
+      setIsLoggedIn(true);
+      localStorage.setItem('leprechaun_logged_in', 'true');
+      setLoginError(false);
+    } else {
+      setLoginError(true);
+    }
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    localStorage.removeItem('leprechaun_logged_in');
+  };
+
   // Scroll to top logic
   useEffect(() => {
     const handleScroll = () => {
@@ -235,7 +259,7 @@ export default function App() {
     });
 
     // Play sound if there are new alerts to notify
-    if (alertsToPlaySound.length > 0 && soundEnabled && notificationsEnabled) {
+    if (alertsToPlaySound.length > 0 && soundEnabled && notificationsEnabled && isLoggedIn) {
       playNotificationSound();
       setNotifiedAlerts(prev => {
         const next = new Set(prev);
@@ -326,6 +350,83 @@ export default function App() {
         />
         <div className="absolute inset-0 bg-emerald-950/5" />
       </div>
+
+      {/* Login Overlay */}
+      <AnimatePresence>
+        {!isLoggedIn && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-emerald-950/70 backdrop-blur-xl"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              className="w-full max-w-md bg-zinc-900/80 backdrop-blur-2xl border border-emerald-500/30 rounded-3xl p-8 shadow-2xl text-center"
+            >
+              <div className="flex justify-center mb-6">
+                <div className="p-3 bg-gradient-to-br from-emerald-500 to-yellow-500 rounded-full shadow-lg shadow-emerald-500/30">
+                  <img 
+                    src="https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png" 
+                    alt="Leprechaun Icon" 
+                    className="w-12 h-12 object-contain"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              </div>
+              
+              <h2 className="text-3xl font-black mb-2 bg-gradient-to-r from-emerald-400 to-yellow-400 bg-clip-text text-transparent">
+                Leprechaun Village
+              </h2>
+              <p className="text-emerald-400/70 text-sm mb-8 font-medium">
+                A sorte é só um detalhe, não o todo.
+              </p>
+
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div className="text-left">
+                  <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1.5 ml-1">Usuário</label>
+                  <input 
+                    type="text" 
+                    value={loginUser}
+                    onChange={(e) => setLoginUser(e.target.value)}
+                    className="w-full bg-emerald-900/20 border border-emerald-500/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 transition-colors"
+                    placeholder="Seu usuário"
+                  />
+                </div>
+                <div className="text-left">
+                  <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1.5 ml-1">Senha</label>
+                  <input 
+                    type="password" 
+                    value={loginPass}
+                    onChange={(e) => setLoginPass(e.target.value)}
+                    className="w-full bg-emerald-900/20 border border-emerald-500/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 transition-colors"
+                    placeholder="Sua senha"
+                  />
+                </div>
+
+                {loginError && (
+                  <motion.p 
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="text-red-400 text-xs font-bold"
+                  >
+                    Usuário ou senha incorretos. Tente novamente!
+                  </motion.p>
+                )}
+
+                <button 
+                  type="submit"
+                  className="w-full py-4 bg-gradient-to-r from-emerald-500 to-yellow-500 text-white font-black rounded-xl shadow-lg shadow-emerald-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-4"
+                >
+                  <Zap size={20} />
+                  ENTRAR NA VILA
+                </button>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Header */}
       <header className="relative z-[150] bg-white/10 backdrop-blur-[2px] border-b border-white/20 px-6 py-4">
@@ -434,6 +535,15 @@ export default function App() {
             >
               {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
             </button>
+            {isLoggedIn && (
+              <button 
+                onClick={handleLogout}
+                className="p-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-all"
+                title="Sair"
+              >
+                <X size={20} />
+              </button>
+            )}
           </div>
         </div>
       </header>
