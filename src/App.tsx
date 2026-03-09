@@ -39,8 +39,10 @@ import { RAGNAROK_EVENTS, ROEvent } from './constants';
 
 export interface BuildEquipment {
   name: string;
-  card: string;
+  cards: string[];
+  cardDescriptions?: string[];
   slots?: number;
+  image?: string;
 }
 
 export interface BuildAttributes {
@@ -57,6 +59,7 @@ export interface ClassBuild {
   className: string;
   version?: string;
   image: string;
+  description?: string;
   attributes: BuildAttributes;
   equipment: {
     elmo: BuildEquipment;
@@ -80,7 +83,8 @@ export interface RosterMember {
 
 export interface WoESchedule {
   days: string[];
-  time: string;
+  startTime: string;
+  endTime: string;
 }
 
 // Helper to parse time string to minutes since midnight
@@ -208,7 +212,7 @@ export default function App() {
   // Roster State
   const [isRosterOpen, setIsRosterOpen] = useState(false);
   const [roster, setRoster] = useState<RosterMember[]>([]);
-  const [woeSchedule, setWoeSchedule] = useState<WoESchedule>({ days: ['Terça', 'Quinta', 'Sábado'], time: '20:00' });
+  const [woeSchedule, setWoeSchedule] = useState<WoESchedule>({ days: ['Terça', 'Quinta', 'Sábado'], startTime: '20:00', endTime: '21:00' });
   const [dataLoaded, setDataLoaded] = useState(false);
 
   // Fetch initial data from server
@@ -219,7 +223,7 @@ export default function App() {
         if (response.ok) {
           const data = await response.json();
           setRoster(data.roster || []);
-          setWoeSchedule(data.woeSchedule || { days: ['Terça', 'Quinta', 'Sábado'], time: '20:00' });
+          setWoeSchedule(data.woeSchedule || { days: ['Terça', 'Quinta', 'Sábado'], startTime: '20:00', endTime: '21:00' });
           setDataLoaded(true);
         }
       } catch (error) {
@@ -265,17 +269,19 @@ export default function App() {
   const [buildForm, setBuildForm] = useState<Partial<ClassBuild>>({
     className: 'Paladin',
     version: '',
+    image: '',
+    description: '',
     attributes: { str: 1, agi: 1, vit: 1, int: 1, dex: 1, luk: 1 },
     equipment: {
-      elmo: { name: '', card: '', slots: 0 },
-      meio: { name: '', card: '', slots: 0 },
-      baixo: { name: '', card: '', slots: 0 },
-      arma: { name: '', card: '', slots: 0 },
-      capa: { name: '', card: '', slots: 0 },
-      armadura: { name: '', card: '', slots: 0 },
-      escudo: { name: '', card: '', slots: 0 },
-      acessorio1: { name: '', card: '', slots: 0 },
-      acessorio2: { name: '', card: '', slots: 0 },
+      elmo: { name: '', cards: [], cardDescriptions: [], slots: 0, image: '' },
+      meio: { name: '', cards: [], cardDescriptions: [], slots: 0, image: '' },
+      baixo: { name: '', cards: [], cardDescriptions: [], slots: 0, image: '' },
+      arma: { name: '', cards: [], cardDescriptions: [], slots: 0, image: '' },
+      capa: { name: '', cards: [], cardDescriptions: [], slots: 0, image: '' },
+      armadura: { name: '', cards: [], cardDescriptions: [], slots: 0, image: '' },
+      escudo: { name: '', cards: [], cardDescriptions: [], slots: 0, image: '' },
+      acessorio1: { name: '', cards: [], cardDescriptions: [], slots: 0, image: '' },
+      acessorio2: { name: '', cards: [], cardDescriptions: [], slots: 0, image: '' },
     }
   });
 
@@ -322,7 +328,7 @@ export default function App() {
     const newBuild: ClassBuild = {
       ...buildForm as ClassBuild,
       id: Date.now().toString(),
-      image: `https://api.dicebear.com/7.x/avataaars/svg?seed=${buildForm.className}${buildForm.version}`
+      image: buildForm.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${buildForm.className}${buildForm.version}`
     };
     setBuilds(prev => [...prev, newBuild]);
     setSelectedBuildId(newBuild.id);
@@ -380,10 +386,10 @@ export default function App() {
   // Roster CRUD
   const addRosterMember = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!rosterFormName || !rosterFormClass) return;
+    if (!rosterFormClass) return;
     const newMember: RosterMember = {
       id: Date.now().toString(),
-      name: rosterFormName,
+      name: rosterFormName || '',
       className: rosterFormClass,
       confirmed: null
     };
@@ -397,7 +403,12 @@ export default function App() {
   };
 
   const updateConfirmation = (id: string, status: boolean | null) => {
-    setRoster(prev => prev.map(m => m.id === id ? { ...m, confirmed: status } : m));
+    setRoster(prev => prev.map(m => {
+      if (m.id === id) {
+        return { ...m, confirmed: m.confirmed === status ? null : status };
+      }
+      return m;
+    }));
   };
 
   // Scroll to top logic
@@ -692,8 +703,8 @@ export default function App() {
                   <X size={28} />
                 </button>
                 <div>
-                  <h2 className="text-2xl font-black text-white tracking-tight">Seleção de Classe & Builds</h2>
-                  <p className="text-[10px] text-emerald-500 font-black uppercase tracking-[0.2em]">Leprechaun Knowledge Base</p>
+                  <h2 className="text-2xl font-black text-white tracking-tight">Build & Gameplay</h2>
+                  <p className="text-[10px] text-emerald-500 font-black uppercase tracking-[0.2em]">Encontre sua Build+Gameplay</p>
                 </div>
               </div>
               {isAdmin && (
@@ -771,6 +782,34 @@ export default function App() {
                               placeholder="Padrão"
                             />
                           </div>
+                          <div>
+                            <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">URL da Imagem da Classe (Opcional)</label>
+                            <input 
+                              type="text"
+                              value={buildForm.image}
+                              onChange={e => setBuildForm({...buildForm, image: e.target.value})}
+                              className="w-full bg-zinc-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
+                              placeholder="https://exemplo.com/imagem.png"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Descrição / Guia de Gameplay</label>
+                            <div className="space-y-2">
+                              <div className="flex gap-2">
+                                <button type="button" onClick={() => setBuildForm({...buildForm, description: (buildForm.description || '') + '<b></b>'})} className="px-2 py-1 bg-zinc-800 rounded text-[10px] font-bold">B</button>
+                                <button type="button" onClick={() => setBuildForm({...buildForm, description: (buildForm.description || '') + '<i></i>'})} className="px-2 py-1 bg-zinc-800 rounded text-[10px] font-bold">I</button>
+                                <button type="button" onClick={() => setBuildForm({...buildForm, description: (buildForm.description || '') + '<br>'})} className="px-2 py-1 bg-zinc-800 rounded text-[10px] font-bold">LB</button>
+                                <button type="button" onClick={() => setBuildForm({...buildForm, description: (buildForm.description || '') + '<span style="color:#10b981"></span>'})} className="px-2 py-1 bg-zinc-800 rounded text-[10px] font-bold text-emerald-500">Color</button>
+                              </div>
+                              <textarea 
+                                value={buildForm.description}
+                                onChange={e => setBuildForm({...buildForm, description: e.target.value})}
+                                className="w-full h-32 bg-zinc-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 text-xs font-mono"
+                                placeholder="Dicas de como jogar, combos, etc. Suporta HTML básico."
+                              />
+                            </div>
+                          </div>
+
                           <div className="grid grid-cols-3 gap-3">
                             {['str', 'agi', 'vit', 'int', 'dex', 'luk'].map(attr => (
                               <div key={attr}>
@@ -791,55 +830,115 @@ export default function App() {
 
                         <div className="space-y-4">
                           <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Equipamentos & Cartas</label>
-                          <div className="grid grid-cols-1 gap-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                            {['elmo', 'meio', 'baixo', 'arma', 'capa', 'armadura', 'escudo', 'acessorio1', 'acessorio2'].map(slot => (
-                              <div key={slot} className="p-3 bg-zinc-950/50 border border-white/5 rounded-xl space-y-2">
-                                <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{slot}</p>
-                                <div className="grid grid-cols-2 gap-2">
-                                  <input 
-                                    type="text"
-                                    placeholder="Nome do Equipamento"
-                                    value={buildForm.equipment?.[slot as keyof ClassBuild['equipment']].name}
-                                    onChange={e => setBuildForm({
-                                      ...buildForm,
-                                      equipment: {
-                                        ...buildForm.equipment!,
-                                        [slot]: { ...buildForm.equipment![slot as keyof ClassBuild['equipment']], name: e.target.value }
-                                      }
-                                    })}
-                                    className="w-full bg-zinc-900 border border-white/5 rounded-lg px-3 py-1.5 text-xs text-white"
-                                  />
-                                  <input 
-                                    type="number"
-                                    placeholder="Slots"
-                                    min="0"
-                                    max="4"
-                                    value={buildForm.equipment?.[slot as keyof ClassBuild['equipment']].slots || 0}
-                                    onChange={e => setBuildForm({
-                                      ...buildForm,
-                                      equipment: {
-                                        ...buildForm.equipment!,
-                                        [slot]: { ...buildForm.equipment![slot as keyof ClassBuild['equipment']], slots: parseInt(e.target.value) }
-                                      }
-                                    })}
-                                    className="w-full bg-zinc-900 border border-white/5 rounded-lg px-3 py-1.5 text-xs text-white"
-                                  />
+                          <div className="grid grid-cols-1 gap-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                            {['elmo', 'meio', 'baixo', 'arma', 'capa', 'armadura', 'escudo', 'acessorio1', 'acessorio2'].map(slot => {
+                              const slotData = buildForm.equipment?.[slot as keyof ClassBuild['equipment']];
+                              const numSlots = slotData?.slots || 0;
+                              return (
+                                <div key={slot} className="p-3 bg-zinc-950/50 border border-white/5 rounded-xl space-y-3">
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">{slot}</p>
+                                    <div className="flex items-center gap-2">
+                                      <label className="text-[8px] font-black text-zinc-600 uppercase">Slots:</label>
+                                      <input 
+                                        type="number"
+                                        min="0"
+                                        max="4"
+                                        value={numSlots}
+                                        onChange={e => {
+                                          const val = parseInt(e.target.value) || 0;
+                                          setBuildForm({
+                                            ...buildForm,
+                                            equipment: {
+                                              ...buildForm.equipment!,
+                                              [slot]: { 
+                                                ...slotData!, 
+                                                slots: val,
+                                                cards: Array(val).fill('').map((_, idx) => slotData?.cards[idx] || ''),
+                                                cardDescriptions: Array(val).fill('').map((_, idx) => slotData?.cardDescriptions?.[idx] || '')
+                                              }
+                                            }
+                                          });
+                                        }}
+                                        className="w-12 bg-zinc-900 border border-white/5 rounded px-1 py-0.5 text-[10px] text-white"
+                                      />
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="space-y-2">
+                                    <input 
+                                      type="text"
+                                      placeholder="Nome do Equipamento"
+                                      value={slotData?.name}
+                                      onChange={e => setBuildForm({
+                                        ...buildForm,
+                                        equipment: {
+                                          ...buildForm.equipment!,
+                                          [slot]: { ...slotData!, name: e.target.value }
+                                        }
+                                      })}
+                                      className="w-full bg-zinc-900 border border-white/5 rounded-lg px-3 py-1.5 text-xs text-white"
+                                    />
+                                    <input 
+                                      type="text"
+                                      placeholder="URL da Imagem do Equipamento (Opcional)"
+                                      value={slotData?.image || ''}
+                                      onChange={e => setBuildForm({
+                                        ...buildForm,
+                                        equipment: {
+                                          ...buildForm.equipment!,
+                                          [slot]: { ...slotData!, image: e.target.value }
+                                        }
+                                      })}
+                                      className="w-full bg-zinc-900 border border-white/5 rounded-lg px-3 py-1.5 text-[10px] text-zinc-400"
+                                    />
+                                    
+                                    {numSlots > 0 && (
+                                      <div className="space-y-2 pl-2 border-l border-emerald-500/20">
+                                        {[...Array(numSlots)].map((_, i) => (
+                                          <div key={i} className="space-y-1">
+                                            <input 
+                                              type="text"
+                                              placeholder={`Carta ${i + 1}`}
+                                              value={slotData?.cards[i] || ''}
+                                              onChange={e => {
+                                                const newCards = [...(slotData?.cards || [])];
+                                                newCards[i] = e.target.value;
+                                                setBuildForm({
+                                                  ...buildForm,
+                                                  equipment: {
+                                                    ...buildForm.equipment!,
+                                                    [slot]: { ...slotData!, cards: newCards }
+                                                  }
+                                                });
+                                              }}
+                                              className="w-full bg-zinc-900/50 border border-emerald-500/10 rounded px-2 py-1 text-[10px] text-emerald-400"
+                                            />
+                                            <input 
+                                              type="text"
+                                              placeholder={`Descrição da Carta ${i + 1} (Opcional)`}
+                                              value={slotData?.cardDescriptions?.[i] || ''}
+                                              onChange={e => {
+                                                const newDescs = [...(slotData?.cardDescriptions || [])];
+                                                newDescs[i] = e.target.value;
+                                                setBuildForm({
+                                                  ...buildForm,
+                                                  equipment: {
+                                                    ...buildForm.equipment!,
+                                                    [slot]: { ...slotData!, cardDescriptions: newDescs }
+                                                  }
+                                                });
+                                              }}
+                                              className="w-full bg-zinc-900/50 border border-emerald-500/10 rounded px-2 py-1 text-[9px] text-emerald-600"
+                                            />
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
-                                <input 
-                                  type="text"
-                                  placeholder="Carta"
-                                  value={buildForm.equipment?.[slot as keyof ClassBuild['equipment']].card}
-                                  onChange={e => setBuildForm({
-                                    ...buildForm,
-                                    equipment: {
-                                      ...buildForm.equipment!,
-                                      [slot]: { ...buildForm.equipment![slot as keyof ClassBuild['equipment']], card: e.target.value }
-                                    }
-                                  })}
-                                  className="w-full bg-zinc-900 border border-white/5 rounded-lg px-3 py-1.5 text-xs text-emerald-400"
-                                />
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
 
@@ -872,8 +971,8 @@ export default function App() {
                             referrerPolicy="no-referrer"
                           />
                           <div className="absolute bottom-0 left-0 right-0 p-8 bg-gradient-to-t from-zinc-950 to-transparent text-center">
-                            <h3 className="text-5xl font-black text-white tracking-tighter">{selectedBuild.className}</h3>
-                            <p className="text-emerald-500 font-black uppercase tracking-[0.3em] text-xs mt-2">{selectedBuild.version || 'Build Padrão'}</p>
+                            <h3 className="text-5xl font-black text-white tracking-tighter drop-shadow-lg">{selectedBuild.className}</h3>
+                            <p className="text-emerald-400 font-black uppercase tracking-[0.3em] text-xs mt-2 bg-emerald-500/10 py-1 px-3 rounded-full inline-block border border-emerald-500/20">{selectedBuild.version || 'Build Padrão'}</p>
                           </div>
                         </div>
 
@@ -925,43 +1024,64 @@ export default function App() {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {Object.entries(selectedBuild.equipment).map(([slot, data]) => (
-                            <motion.div 
-                              key={slot}
-                              whileHover={{ scale: 1.02 }}
-                              className="bg-zinc-900/40 border border-white/5 rounded-2xl p-4 flex items-center gap-4 group hover:border-emerald-500/30 transition-all"
-                            >
-                              <div className="w-12 h-12 bg-zinc-950 rounded-xl flex items-center justify-center text-zinc-600 group-hover:text-emerald-500 transition-colors border border-white/5">
-                                {slot.includes('acessorio') ? <Zap size={20} /> : 
-                                 slot === 'arma' ? <SwordIcon size={20} /> :
-                                 slot === 'escudo' ? <ShieldCheck size={20} /> :
-                                 <Plus size={20} />}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between mb-0.5">
-                                  <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">{slot}</p>
-                                  {(data as BuildEquipment).slots !== undefined && (data as BuildEquipment).slots! > 0 && (
-                                    <div className="flex gap-0.5">
-                                      {[...Array((data as BuildEquipment).slots)].map((_, i) => (
-                                        <div key={i} className="w-1.5 h-1.5 rounded-full bg-emerald-500/40 border border-emerald-500/60" />
-                                      ))}
-                                    </div>
+                          {Object.entries(selectedBuild.equipment).map(([slot, data]) => {
+                            const eq = data as BuildEquipment;
+                            return (
+                              <motion.div 
+                                key={slot}
+                                whileHover={{ scale: 1.02 }}
+                                className="bg-zinc-900/40 border border-white/5 rounded-2xl p-4 flex items-center gap-4 group hover:border-emerald-500/30 transition-all"
+                              >
+                                <div className="w-14 h-14 bg-zinc-950 rounded-xl flex items-center justify-center text-zinc-600 group-hover:text-emerald-500 transition-colors border border-white/5 overflow-hidden">
+                                  {eq.image ? (
+                                    <img src={eq.image} alt={eq.name} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                                  ) : (
+                                    slot.includes('acessorio') ? <Zap size={24} /> : 
+                                    slot === 'arma' ? <SwordIcon size={24} /> :
+                                    slot === 'escudo' ? <ShieldCheck size={24} /> :
+                                    <Plus size={24} />
                                   )}
                                 </div>
-                                <p className="text-xs font-bold text-white truncate">{(data as BuildEquipment).name || 'Vazio'}</p>
-                                {(data as BuildEquipment).card && (
-                                  <p className="text-[10px] font-bold text-emerald-500/80 truncate flex items-center gap-1">
-                                    <Sparkles size={10} /> {(data as BuildEquipment).card}
-                                  </p>
-                                )}
-                              </div>
-                            </motion.div>
-                          ))}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between mb-0.5">
+                                    <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">{slot}</p>
+                                    {eq.slots !== undefined && eq.slots > 0 && (
+                                      <div className="flex gap-0.5">
+                                        {[...Array(eq.slots)].map((_, i) => (
+                                          <div key={i} className="w-1.5 h-1.5 rounded-full bg-emerald-500/40 border border-emerald-500/60" />
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <p className="text-xs font-bold text-white truncate">{eq.name || 'Vazio'}</p>
+                                  {eq.cards && eq.cards.length > 0 && eq.cards.map((card, idx) => card && (
+                                    <div key={idx} className="mt-1">
+                                      <p className="text-[10px] font-bold text-emerald-500/80 truncate flex items-center gap-1">
+                                        <Sparkles size={10} /> {card}
+                                      </p>
+                                      {eq.cardDescriptions?.[idx] && (
+                                        <p className="text-[8px] text-emerald-600/60 italic pl-3 truncate">{eq.cardDescriptions[idx]}</p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </motion.div>
+                            );
+                          })}
                         </div>
 
-                        {/* Class Intro (Placeholder text) */}
-                        <div className="mt-8 p-6 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl italic text-emerald-400/60 text-sm leading-relaxed">
-                          "O {selectedBuild.className} é essencial para a estratégia da WoE. Esta build de {selectedBuild.version || 'Padrão'} foca em maximizar a eficiência do clã durante os embates mais intensos."
+                        {/* Class Intro / Gameplay Guide */}
+                        <div className="mt-8 p-8 bg-emerald-500/5 border border-emerald-500/10 rounded-3xl relative overflow-hidden">
+                          <div className="absolute top-0 right-0 p-4 opacity-10">
+                            <BookOpen size={64} className="text-emerald-500" />
+                          </div>
+                          <h4 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <Gamepad2 size={14} /> Guia de Gameplay & Estratégia
+                          </h4>
+                          <div 
+                            className="text-emerald-400/80 text-sm leading-relaxed prose prose-invert prose-emerald max-w-none"
+                            dangerouslySetInnerHTML={{ __html: selectedBuild.description || 'Nenhum guia de gameplay cadastrado para esta build.' }}
+                          />
                         </div>
                       </div>
                     </motion.div>
@@ -1024,7 +1144,8 @@ export default function App() {
                     <Calendar className="text-yellow-500" size={20} />
                     <div>
                       <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Próxima Guerra</p>
-                      <p className="text-sm font-bold text-white">{woeSchedule.days.join(', ')} às {woeSchedule.time}</p>
+                      <p className="text-sm font-bold text-white">{woeSchedule.days.join(', ')}</p>
+                      <p className="text-[10px] text-emerald-400 font-bold">{woeSchedule.startTime} às {woeSchedule.endTime}</p>
                     </div>
                   </div>
                   <div className="text-right">
@@ -1058,48 +1179,67 @@ export default function App() {
                         exit={{ height: 0, opacity: 0 }}
                         className="overflow-hidden"
                       >
-                        <div className="bg-emerald-900/40 border border-yellow-500/30 rounded-2xl p-4 mb-4 space-y-4">
-                          <form onSubmit={addRosterMember} className="space-y-3">
-                            <div className="grid grid-cols-2 gap-3">
-                              <input 
-                                type="text" 
-                                placeholder="Nome"
-                                value={rosterFormName}
-                                onChange={(e) => setRosterFormName(e.target.value)}
-                                className="bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
-                              />
-                              <input 
-                                type="text" 
-                                placeholder="Classe"
-                                value={rosterFormClass}
-                                onChange={(e) => setRosterFormClass(e.target.value)}
-                                className="bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
-                              />
-                            </div>
-                            <button 
-                              type="submit"
-                              className="w-full py-2 bg-emerald-500 text-white text-xs font-black rounded-lg hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2"
-                            >
-                              <Plus size={14} /> ADICIONAR AO PLANTEL
-                            </button>
-                          </form>
+                        <div className="space-y-4 mb-4">
+                          {/* Member Form */}
+                          <div className="bg-emerald-900/40 border border-yellow-500/30 rounded-2xl p-4 space-y-3">
+                            <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Adicionar Integrante</p>
+                            <form onSubmit={addRosterMember} className="space-y-3">
+                              <div className="grid grid-cols-2 gap-3">
+                                <input 
+                                  type="text" 
+                                  placeholder="Classe"
+                                  value={rosterFormClass}
+                                  onChange={(e) => setRosterFormClass(e.target.value)}
+                                  className="bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                                />
+                                <input 
+                                  type="text" 
+                                  placeholder="Nome (Opcional)"
+                                  value={rosterFormName}
+                                  onChange={(e) => setRosterFormName(e.target.value)}
+                                  className="bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                                />
+                              </div>
+                              <button 
+                                type="submit"
+                                className="w-full py-2 bg-emerald-500 text-white text-xs font-black rounded-lg hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2"
+                              >
+                                <Plus size={14} /> ADICIONAR AO PLANTEL
+                              </button>
+                            </form>
+                          </div>
 
-                          <div className="pt-3 border-t border-emerald-500/20">
-                            <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Configurar Horário</p>
-                            <div className="grid grid-cols-2 gap-3">
+                          {/* Schedule Form */}
+                          <div className="bg-emerald-900/40 border border-emerald-500/30 rounded-2xl p-4 space-y-3">
+                            <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Configurar Guerra</p>
+                            <div className="space-y-3">
                               <input 
                                 type="text" 
-                                placeholder="Dias (ex: Seg, Qua)"
+                                placeholder="Dias (ex: Ter, Qui, Sáb)"
                                 value={woeSchedule.days.join(', ')}
                                 onChange={(e) => setWoeSchedule(prev => ({ ...prev, days: e.target.value.split(',').map(d => d.trim()) }))}
-                                className="bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                                className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
                               />
-                              <input 
-                                type="time" 
-                                value={woeSchedule.time}
-                                onChange={(e) => setWoeSchedule(prev => ({ ...prev, time: e.target.value }))}
-                                className="bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
-                              />
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-[8px] font-black text-emerald-600 uppercase mb-1">Início</label>
+                                  <input 
+                                    type="time" 
+                                    value={woeSchedule.startTime}
+                                    onChange={(e) => setWoeSchedule(prev => ({ ...prev, startTime: e.target.value }))}
+                                    className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[8px] font-black text-emerald-600 uppercase mb-1">Término</label>
+                                  <input 
+                                    type="time" 
+                                    value={woeSchedule.endTime}
+                                    onChange={(e) => setWoeSchedule(prev => ({ ...prev, endTime: e.target.value }))}
+                                    className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                                  />
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -1111,14 +1251,17 @@ export default function App() {
                     <table className="w-full text-left text-xs">
                       <thead className="bg-emerald-900/40 border-b border-emerald-500/20">
                         <tr>
-                          <th className="px-4 py-3 font-black text-emerald-500 uppercase tracking-widest">Nome</th>
+                          <th className="px-4 py-3 font-black text-emerald-500 uppercase tracking-widest w-12 text-center">#</th>
                           <th className="px-4 py-3 font-black text-emerald-500 uppercase tracking-widest">Classe</th>
+                          <th className="px-4 py-3 font-black text-emerald-500 uppercase tracking-widest">Nome</th>
                           <th className="px-4 py-3 font-black text-emerald-500 uppercase tracking-widest text-center">Confirmação</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-emerald-500/10">
-                        {roster.map(member => (
+                        {roster.map((member, index) => (
                           <tr key={member.id} className="group hover:bg-emerald-800/20 transition-colors">
+                            <td className="px-4 py-3 text-emerald-700 font-black text-center">{index + 1}</td>
+                            <td className="px-4 py-3 text-emerald-300/80 font-medium italic">{member.className}</td>
                             <td className="px-4 py-3 font-bold text-white flex items-center gap-2">
                               {isAdmin && isRosterAdminOpen && (
                                 <button 
@@ -1128,9 +1271,8 @@ export default function App() {
                                   <Trash2 size={12} />
                                 </button>
                               )}
-                              {member.name}
+                              {member.name || <span className="text-zinc-600 italic">Sem nome</span>}
                             </td>
-                            <td className="px-4 py-3 text-emerald-300/80 font-medium italic">{member.className}</td>
                             <td className="px-4 py-3">
                               <div className="flex items-center justify-center gap-2">
                                 <button 
