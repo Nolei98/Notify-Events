@@ -256,10 +256,22 @@ export default function App() {
   const [dataLoaded, setDataLoaded] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false); // Re-adding this state for internal logic if needed, though UI is removed
 
+  const remoteUpdateKeys = useRef<Set<string>>(new Set());
+
   // Socket Connection and Initial Fetch
   useEffect(() => {
-    const socket = io();
+    const socket = io({
+      transports: ['websocket', 'polling']
+    });
     socketRef.current = socket;
+
+    socket.on("connect", () => {
+      console.log("Connected to server");
+    });
+
+    socket.on("connect_error", (error) => {
+      console.error("Connection error:", error);
+    });
 
     const fetchAllData = async () => {
       try {
@@ -297,6 +309,7 @@ export default function App() {
     fetchAllData();
 
     socket.on("data-updated", ({ key, data }: { key: string, data: any }) => {
+      remoteUpdateKeys.current.add(key);
       switch (key) {
         case 'roster':
           setRoster(data.roster);
@@ -329,6 +342,10 @@ export default function App() {
 
   // Helper to sync data to server
   const syncData = (key: string, data: any) => {
+    if (remoteUpdateKeys.current.has(key)) {
+      remoteUpdateKeys.current.delete(key);
+      return;
+    }
     if (socketRef.current) {
       socketRef.current.emit("update-data", { key, data });
     }

@@ -59,7 +59,12 @@ Object.entries(FILES).forEach(([key, filePath]) => {
 async function startServer() {
   const app = express();
   const httpServer = createServer(app);
-  const io = new Server(httpServer);
+  const io = new Server(httpServer, {
+    cors: {
+      origin: "*",
+      methods: ["GET", "POST"]
+    }
+  });
   const PORT = 3000;
 
   app.use(express.json());
@@ -81,11 +86,16 @@ async function startServer() {
   };
 
   const writeData = (key: keyof typeof FILES, data: any) => {
-    fs.writeFileSync(FILES[key], JSON.stringify(data, null, 2));
+    try {
+      fs.writeFileSync(FILES[key], JSON.stringify(data, null, 2));
+    } catch (e) {
+      console.error(`Error writing ${key}:`, e);
+    }
   };
 
   // API Routes
   app.get("/api/all-data", (req, res) => {
+    console.log("Fetching all data");
     const allData = Object.keys(FILES).reduce((acc, key) => {
       acc[key] = readData(key as keyof typeof FILES);
       return acc;
@@ -95,9 +105,10 @@ async function startServer() {
 
   // Socket.io for real-time updates
   io.on("connection", (socket) => {
-    console.log("A user connected");
+    console.log(`A user connected: ${socket.id}`);
 
     socket.on("update-data", ({ key, data }: { key: keyof typeof FILES, data: any }) => {
+      console.log(`Data update for ${key} from ${socket.id}`);
       writeData(key, data);
       // Broadcast to all other clients
       socket.broadcast.emit("data-updated", { key, data });
