@@ -273,7 +273,7 @@ export default function App() {
           setUtilityCategories(data.utilities.categories || ['Geral', 'Guias', 'MvP', 'PvP', 'Builds']);
           setPlayerAllowedCategory(data.utilities.playerAllowedCategory || '');
           setCustomEvents(data.events.customEvents || []);
-          setUsers(data.users.users || [
+          setUsers(data.users.users && data.users.users.length > 0 ? data.users.users : [
             { id: '1', username: 'admin', password: 'admin123', role: 'admin' },
             { id: '2', username: 'player', password: '1234', role: 'player' }
           ]);

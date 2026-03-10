@@ -31,7 +31,12 @@ const INITIAL_DATA = {
   builds: { builds: [] },
   utilities: { posts: [], categories: ['Geral', 'Guias', 'MvP', 'PvP', 'Builds'], playerAllowedCategory: '' },
   events: { customEvents: [] },
-  users: { users: [] },
+  users: { 
+    users: [
+      { id: '1', username: 'admin', password: 'admin123', role: 'admin' },
+      { id: '2', username: 'player', password: '1234', role: 'player' }
+    ] 
+  },
   categories: { categories: ['Geral', 'Guias', 'MvP', 'PvP', 'Builds'] },
   settings: {
     siteTitle: 'Leprechaun Village',
@@ -62,9 +67,16 @@ async function startServer() {
   // Helper to read/write data
   const readData = (key: keyof typeof FILES) => {
     try {
-      return JSON.parse(fs.readFileSync(FILES[key], "utf-8"));
+      const content = fs.readFileSync(FILES[key], "utf-8");
+      if (!content || content.trim() === "") {
+        throw new Error("Empty file");
+      }
+      return JSON.parse(content);
     } catch (e) {
-      return INITIAL_DATA[key];
+      console.error(`Error reading ${key}:`, e);
+      const defaultData = INITIAL_DATA[key];
+      writeData(key, defaultData);
+      return defaultData;
     }
   };
 
