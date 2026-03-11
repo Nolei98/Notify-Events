@@ -288,7 +288,8 @@ export default function App() {
           setUtilityCategories(data.utilities.categories || ['Geral', 'Guias', 'MvP', 'PvP', 'Builds']);
           setPlayerAllowedCategory(data.utilities.playerAllowedCategory || '');
           setCustomEvents(data.events.customEvents || []);
-          setUsers(data.users.users && data.users.users.length > 0 ? data.users.users : [
+          const usersData = data.users?.users || (Array.isArray(data.users) ? data.users : []);
+          setUsers(usersData.length > 0 ? usersData : [
             { id: '1', username: 'admin', password: 'admin123', role: 'admin' },
             { id: '2', username: 'player', password: '1234', role: 'player' }
           ]);
@@ -484,9 +485,30 @@ export default function App() {
 
   const [userForm, setUserForm] = useState({ username: '', password: '', role: 'player' as 'admin' | 'player' });
 
+  const [showPassword, setShowPassword] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [regUser, setRegUser] = useState('');
+  const [regPass, setRegPass] = useState('');
+  const [regConfirmPass, setRegConfirmPass] = useState('');
+  const [regError, setRegError] = useState('');
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    const user = users.find(u => u.username === loginUser && u.password === loginPass);
+    if (!dataLoaded) return;
+
+    const trimmedUser = loginUser.trim();
+    const trimmedPass = loginPass.trim();
+
+    if (!trimmedUser || !trimmedPass) {
+      setLoginError(true);
+      return;
+    }
+
+    const user = users.find(u => 
+      u.username.toLowerCase() === trimmedUser.toLowerCase() && 
+      u.password === trimmedPass
+    );
+
     if (user) {
       setIsLoggedIn(true);
       setIsAdmin(user.role === 'admin');
@@ -498,6 +520,45 @@ export default function App() {
     } else {
       setLoginError(true);
     }
+  };
+
+  const handleRegister = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dataLoaded) return;
+
+    const trimmedUser = regUser.trim();
+    const trimmedPass = regPass.trim();
+
+    if (!trimmedUser || !trimmedPass) {
+      setRegError('Preencha todos os campos.');
+      return;
+    }
+
+    if (trimmedPass !== regConfirmPass) {
+      setRegError('As senhas não coincidem.');
+      return;
+    }
+
+    if (users.some(u => u.username.toLowerCase() === trimmedUser.toLowerCase())) {
+      setRegError('Usuário já existe.');
+      return;
+    }
+
+    const newUser: User = {
+      id: Date.now().toString(),
+      username: trimmedUser,
+      password: trimmedPass,
+      role: 'player'
+    };
+
+    setUsers(prev => [...prev, newUser]);
+    setIsRegistering(false);
+    setLoginUser(trimmedUser);
+    setLoginPass(trimmedPass);
+    setRegUser('');
+    setRegPass('');
+    setRegConfirmPass('');
+    setRegError('');
   };
 
   const handleLogout = () => {
@@ -943,58 +1004,159 @@ export default function App() {
                 className="text-3xl font-black mb-2 bg-clip-text text-transparent"
                 style={{ backgroundImage: `linear-gradient(to right, ${siteSettings.primaryColor}, ${siteSettings.accentColor})` }}
               >
-                {siteSettings.siteTitle}
+                {isRegistering ? 'Criar Conta' : siteSettings.siteTitle}
               </h2>
               <p className="text-sm mb-8 font-medium opacity-70" style={{ color: siteSettings.primaryColor }}>
-                A sorte é só um detalhe, não o todo.
+                {isRegistering ? 'Junte-se à nossa vila hoje!' : 'A sorte é só um detalhe, não o todo.'}
               </p>
 
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div className="text-left">
-                  <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5 ml-1" style={{ color: siteSettings.primaryColor }}>Usuário</label>
-                  <input 
-                    type="text" 
-                    value={loginUser}
-                    onChange={(e) => setLoginUser(e.target.value)}
-                    className="w-full bg-zinc-950/50 border rounded-xl px-4 py-3 text-white focus:outline-none transition-colors"
-                    style={{ borderColor: `${siteSettings.primaryColor}33` }}
-                    placeholder="Seu usuário"
-                  />
-                </div>
-                <div className="text-left">
-                  <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5 ml-1" style={{ color: siteSettings.primaryColor }}>Senha</label>
-                  <input 
-                    type="password" 
-                    value={loginPass}
-                    onChange={(e) => setLoginPass(e.target.value)}
-                    className="w-full bg-zinc-950/50 border rounded-xl px-4 py-3 text-white focus:outline-none transition-colors"
-                    style={{ borderColor: `${siteSettings.primaryColor}33` }}
-                    placeholder="Sua senha"
-                  />
-                </div>
+              {isRegistering ? (
+                <form onSubmit={handleRegister} className="space-y-4">
+                  <div className="text-left">
+                    <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5 ml-1" style={{ color: siteSettings.primaryColor }}>Usuário</label>
+                    <input 
+                      type="text" 
+                      value={regUser}
+                      onChange={(e) => setRegUser(e.target.value)}
+                      className="w-full bg-zinc-950/50 border rounded-xl px-4 py-3 text-white focus:outline-none transition-colors"
+                      style={{ borderColor: `${siteSettings.primaryColor}33` }}
+                      placeholder="Escolha um usuário"
+                      required
+                    />
+                  </div>
+                  <div className="text-left">
+                    <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5 ml-1" style={{ color: siteSettings.primaryColor }}>Senha</label>
+                    <input 
+                      type="password" 
+                      value={regPass}
+                      onChange={(e) => setRegPass(e.target.value)}
+                      className="w-full bg-zinc-950/50 border rounded-xl px-4 py-3 text-white focus:outline-none transition-colors"
+                      style={{ borderColor: `${siteSettings.primaryColor}33` }}
+                      placeholder="Escolha uma senha"
+                      required
+                    />
+                  </div>
+                  <div className="text-left">
+                    <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5 ml-1" style={{ color: siteSettings.primaryColor }}>Confirmar Senha</label>
+                    <input 
+                      type="password" 
+                      value={regConfirmPass}
+                      onChange={(e) => setRegConfirmPass(e.target.value)}
+                      className="w-full bg-zinc-950/50 border rounded-xl px-4 py-3 text-white focus:outline-none transition-colors"
+                      style={{ borderColor: `${siteSettings.primaryColor}33` }}
+                      placeholder="Repita a senha"
+                      required
+                    />
+                  </div>
 
-                {loginError && (
-                  <motion.p 
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="text-red-400 text-xs font-bold"
+                  {regError && (
+                    <motion.p 
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="text-red-400 text-xs font-bold"
+                    >
+                      {regError}
+                    </motion.p>
+                  )}
+
+                  <button 
+                    type="submit"
+                    disabled={!dataLoaded}
+                    className={`w-full py-4 text-white font-black rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 mt-4 ${!dataLoaded ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.02] active:scale-[0.98]'}`}
+                    style={{ 
+                      background: `linear-gradient(to right, ${siteSettings.primaryColor}, ${siteSettings.accentColor})`,
+                      boxShadow: `0 10px 15px -3px ${siteSettings.primaryColor}4d`
+                    }}
                   >
-                    Usuário ou senha incorretos. Tente novamente!
-                  </motion.p>
-                )}
+                    {dataLoaded ? 'CADASTRAR' : 'CARREGANDO...'}
+                  </button>
 
-                <button 
-                  type="submit"
-                  className="w-full py-4 text-white font-black rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 mt-4"
-                  style={{ 
-                    background: `linear-gradient(to right, ${siteSettings.primaryColor}, ${siteSettings.accentColor})`,
-                    boxShadow: `0 10px 15px -3px ${siteSettings.primaryColor}4d`
-                  }}
-                >
-                  <Zap size={20} />
-                  ENTRAR NA VILA
-                </button>
-              </form>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setIsRegistering(false);
+                      setRegError('');
+                    }}
+                    className="w-full text-xs font-bold opacity-60 hover:opacity-100 transition-opacity"
+                    style={{ color: siteSettings.primaryColor }}
+                  >
+                    Já tem uma conta? Entrar
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div className="text-left">
+                    <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5 ml-1" style={{ color: siteSettings.primaryColor }}>Usuário</label>
+                    <input 
+                      type="text" 
+                      value={loginUser}
+                      onChange={(e) => setLoginUser(e.target.value)}
+                      className="w-full bg-zinc-950/50 border rounded-xl px-4 py-3 text-white focus:outline-none transition-colors"
+                      style={{ borderColor: `${siteSettings.primaryColor}33` }}
+                      placeholder="Seu usuário"
+                    />
+                  </div>
+                  <div className="text-left relative">
+                    <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5 ml-1" style={{ color: siteSettings.primaryColor }}>Senha</label>
+                    <input 
+                      type={showPassword ? "text" : "password"} 
+                      value={loginPass}
+                      onChange={(e) => setLoginPass(e.target.value)}
+                      className="w-full bg-zinc-950/50 border rounded-xl px-4 py-3 text-white focus:outline-none transition-colors pr-12"
+                      style={{ borderColor: `${siteSettings.primaryColor}33` }}
+                      placeholder="Sua senha"
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 bottom-3.5 text-white/40 hover:text-white/80 transition-colors"
+                    >
+                      {showPassword ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                    </button>
+                  </div>
+
+                  {loginError && (
+                    <motion.p 
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="text-red-400 text-xs font-bold"
+                    >
+                      Usuário ou senha incorretos. Tente novamente!
+                    </motion.p>
+                  )}
+
+                  <button 
+                    type="submit"
+                    disabled={!dataLoaded}
+                    className={`w-full py-4 text-white font-black rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 mt-4 ${!dataLoaded ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.02] active:scale-[0.98]'}`}
+                    style={{ 
+                      background: `linear-gradient(to right, ${siteSettings.primaryColor}, ${siteSettings.accentColor})`,
+                      boxShadow: `0 10px 15px -3px ${siteSettings.primaryColor}4d`
+                    }}
+                  >
+                    {dataLoaded ? (
+                      <>
+                        <Zap size={20} />
+                        ENTRAR NA VILA
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        CARREGANDO...
+                      </>
+                    )}
+                  </button>
+
+                  <button 
+                    type="button"
+                    onClick={() => setIsRegistering(true)}
+                    className="w-full text-xs font-bold opacity-60 hover:opacity-100 transition-opacity"
+                    style={{ color: siteSettings.primaryColor }}
+                  >
+                    Não tem uma conta? Cadastre-se
+                  </button>
+                </form>
+              )}
             </motion.div>
           </motion.div>
         )}
