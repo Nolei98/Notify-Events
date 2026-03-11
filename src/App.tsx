@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { io, Socket } from 'socket.io-client';
 import { 
   Clock, 
   Bell, 
@@ -39,8 +40,7 @@ import {
   Search,
   Download,
   Filter,
-  Edit,
-  Palette
+  Edit
 } from 'lucide-react';
 import { RAGNAROK_EVENTS, ROEvent } from './constants';
 
@@ -110,17 +110,6 @@ export interface UtilityPost {
   category: string;
   author: string;
   createdAt: string;
-}
-
-export interface SiteSettings {
-  siteTitle: string;
-  clanIconUrl: string;
-  mainPageIconUrl: string;
-  backgroundUrl: string;
-  primaryColor: string;
-  accentColor: string;
-  fontColor: string;
-  effectsEnabled: boolean;
 }
 
 // Helper to parse time string to minutes since midnight
@@ -205,6 +194,7 @@ const GlitterEffect = ({ enabled = true, color = '#fbbf24' }: { enabled?: boolea
 };
 
 export default function App() {
+  const socketRef = useRef<Socket | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
     const saved = localStorage.getItem('omega_notif_enabled');
@@ -232,68 +222,179 @@ export default function App() {
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
   const [notifiedAlerts, setNotifiedAlerts] = useState<Set<string>>(new Set());
   
-  // Staff Panel State
-  const [isStaffPanelOpen, setIsStaffPanelOpen] = useState(false);
-  const [customEvents, setCustomEvents] = useState<ROEvent[]>(() => {
-    const saved = localStorage.getItem('omega_custom_events');
-    return saved ? JSON.parse(saved) : [];
+  // Shared State (Synced with Server)
+  const [customEvents, setCustomEvents] = useState<ROEvent[]>([]);
+  const [roster, setRoster] = useState<RosterMember[]>([]);
+  const [woeSchedule, setWoeSchedule] = useState<WoESchedule>({ days: ['Terça', 'Quinta', 'Sábado'], startTime: '20:00', endTime: '21:00' });
+  const [classTypes, setClassTypes] = useState<string[]>(['Paladin', 'Professor', 'Clown', 'High Wizard', 'Creator', 'Sniper', 'Stalker', 'Champion']);
+  const [builds, setBuilds] = useState<ClassBuild[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [utilities, setUtilities] = useState<UtilityPost[]>([]);
+  const [utilityCategories, setUtilityCategories] = useState<string[]>(['Geral', 'Guias', 'MvP', 'PvP', 'Builds']);
+  const [playerAllowedCategory, setPlayerAllowedCategory] = useState<string>('');
+  const [siteSettings, setSiteSettings] = useState({
+    siteTitle: 'Leprechaun Village',
+    clanIconUrl: 'https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png',
+    mainPageIconUrl: 'https://i.pinimg.com/originals/3f/05/d8/3f05d83924eef0ed0561fa2352a7b9d4.gif',
+    backgroundUrl: 'https://picsum.photos/seed/ragnarok/1920/1080?blur=2',
+    primaryColor: '#10b981',
+    accentColor: '#fbbf24',
+    fontColor: '#ffffff',
+    effectsEnabled: true
   });
   
-  // Form State
+  // Local UI State
+  const [isStaffPanelOpen, setIsStaffPanelOpen] = useState(false);
   const [formTime, setFormTime] = useState('');
   const [formTitle, setFormTitle] = useState('');
   const [formPrize, setFormPrize] = useState('');
   const [formDesc, setFormDesc] = useState('');
   const [formCategory, setFormCategory] = useState<ROEvent['category']>('Special');
   const [showScrollTop, setShowScrollTop] = useState(false);
-
-  // Roster State
   const [isRosterOpen, setIsRosterOpen] = useState(false);
-  const [roster, setRoster] = useState<RosterMember[]>([]);
-  const [woeSchedule, setWoeSchedule] = useState<WoESchedule>({ days: ['Terça', 'Quinta', 'Sábado'], startTime: '20:00', endTime: '21:00' });
-  const [classTypes, setClassTypes] = useState<string[]>(['Paladin', 'Professor', 'Clown', 'High Wizard', 'Creator', 'Sniper', 'Stalker', 'Champion']);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false); // Re-adding this state for internal logic if needed, though UI is removed
 
-  // Fetch initial data from server
+  // Socket Connection and Initial Fetch
   useEffect(() => {
-    const fetchData = async () => {
+    const socket = io();
+    socketRef.current = socket;
+
+    const fetchAllData = async () => {
       try {
-        const response = await fetch('/api/data');
+        const response = await fetch('/api/all-data');
         if (response.ok) {
           const data = await response.json();
-          setRoster(data.roster || []);
-          setWoeSchedule(data.woeSchedule || { days: ['Terça', 'Quinta', 'Sábado'], startTime: '20:00', endTime: '21:00' });
-          if (data.classTypes && data.classTypes.length > 0) {
-            setClassTypes(data.classTypes);
-          }
+          setRoster(data.roster.roster || []);
+          setWoeSchedule(data.roster.woeSchedule || { days: ['Terça', 'Quinta', 'Sábado'], startTime: '20:00', endTime: '21:00' });
+          setBuilds(data.builds.builds || []);
+          setUtilities(data.utilities.posts || []);
+          setUtilityCategories(data.utilities.categories || ['Geral', 'Guias', 'MvP', 'PvP', 'Builds']);
+          setPlayerAllowedCategory(data.utilities.playerAllowedCategory || '');
+          setCustomEvents(data.events.customEvents || []);
+          setUsers(data.users.users || [
+            { id: '1', username: 'admin', password: 'admin123', role: 'admin' },
+            { id: '2', username: 'player', password: '1234', role: 'player' }
+          ]);
+          setSiteSettings(data.settings || {
+            siteTitle: 'Leprechaun Village',
+            clanIconUrl: 'https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png',
+            mainPageIconUrl: 'https://i.pinimg.com/originals/3f/05/d8/3f05d83924eef0ed0561fa2352a7b9d4.gif',
+            backgroundUrl: 'https://picsum.photos/seed/ragnarok/1920/1080?blur=2',
+            primaryColor: '#10b981',
+            accentColor: '#fbbf24',
+            fontColor: '#ffffff',
+            effectsEnabled: true
+          });
           setDataLoaded(true);
         }
       } catch (error) {
-        console.error("Failed to fetch shared data:", error);
+        console.error("Failed to fetch all data:", error);
       }
     };
-    fetchData();
+
+    fetchAllData();
+
+    socket.on("data-updated", ({ key, data }: { key: string, data: any }) => {
+      switch (key) {
+        case 'roster':
+          setRoster(data.roster);
+          setWoeSchedule(data.woeSchedule);
+          break;
+        case 'builds':
+          setBuilds(data.builds);
+          break;
+        case 'utilities':
+          setUtilities(data.posts);
+          setUtilityCategories(data.categories);
+          setPlayerAllowedCategory(data.playerAllowedCategory);
+          break;
+        case 'events':
+          setCustomEvents(data.customEvents);
+          break;
+        case 'users':
+          setUsers(data.users);
+          break;
+        case 'settings':
+          setSiteSettings(data);
+          break;
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, []);
 
-  // Save data to server whenever it changes
+  // Helper to sync data to server
+  const syncData = (key: string, data: any) => {
+    if (socketRef.current) {
+      socketRef.current.emit("update-data", { key, data });
+    }
+  };
+
+  // Sync effects for each shared state
   useEffect(() => {
     if (!dataLoaded) return;
-    
-    const saveData = async () => {
-      try {
-        await fetch('/api/data', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ roster, woeSchedule, classTypes })
-        });
-      } catch (error) {
-        console.error("Failed to save shared data:", error);
-      }
-    };
-    
-    const timer = setTimeout(saveData, 500); // Debounce saves
+    const timer = setTimeout(() => {
+      syncData('roster', { roster, woeSchedule });
+    }, 500);
     return () => clearTimeout(timer);
-  }, [roster, woeSchedule, classTypes, dataLoaded]);
+  }, [roster, woeSchedule, dataLoaded]);
+
+  useEffect(() => {
+    if (!dataLoaded) return;
+    const timer = setTimeout(() => {
+      syncData('builds', { builds });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [builds, dataLoaded]);
+
+  useEffect(() => {
+    if (!dataLoaded) return;
+    const timer = setTimeout(() => {
+      syncData('utilities', { posts: utilities, categories: utilityCategories, playerAllowedCategory });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [utilities, utilityCategories, playerAllowedCategory, dataLoaded]);
+
+  useEffect(() => {
+    if (!dataLoaded) return;
+    const timer = setTimeout(() => {
+      syncData('events', { customEvents });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [customEvents, dataLoaded]);
+
+  useEffect(() => {
+    if (!dataLoaded) return;
+    const timer = setTimeout(() => {
+      syncData('users', { users });
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [users, dataLoaded]);
+
+  useEffect(() => {
+    if (!dataLoaded) return;
+    const timer = setTimeout(() => {
+      syncData('settings', siteSettings);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [siteSettings, dataLoaded]);
+
+  useEffect(() => {
+    if (!dataLoaded) return;
+    document.title = siteSettings.siteTitle;
+    const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+    if (link) {
+      link.href = siteSettings.clanIconUrl;
+    } else {
+      const newLink = document.createElement('link');
+      newLink.rel = 'icon';
+      newLink.href = siteSettings.clanIconUrl;
+      document.head.appendChild(newLink);
+    }
+  }, [siteSettings, dataLoaded]);
 
   // Admin Form for Roster
   const [isRosterAdminOpen, setIsRosterAdminOpen] = useState(false);
@@ -303,7 +404,6 @@ export default function App() {
 
   // Builds State
   const [isBuildsOpen, setIsBuildsOpen] = useState(false);
-  const [builds, setBuilds] = useState<ClassBuild[]>([]);
   const [selectedBuildId, setSelectedBuildId] = useState<string | null>(null);
   const [isBuildAdminOpen, setIsBuildAdminOpen] = useState(false);
   const [buildsLoaded, setBuildsLoaded] = useState(false);
@@ -329,44 +429,6 @@ export default function App() {
     }
   });
 
-  // Fetch builds from server
-  useEffect(() => {
-    const fetchBuilds = async () => {
-      try {
-        const response = await fetch('/api/builds');
-        if (response.ok) {
-          const data = await response.json();
-          setBuilds(data.builds || []);
-          setBuildsLoaded(true);
-          if (data.builds?.length > 0) {
-            setSelectedBuildId(data.builds[0].id);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to fetch builds:", error);
-      }
-    };
-    fetchBuilds();
-  }, []);
-
-  // Save builds to server
-  useEffect(() => {
-    if (!buildsLoaded) return;
-    const saveBuilds = async () => {
-      try {
-        await fetch('/api/builds', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ builds })
-        });
-      } catch (error) {
-        console.error("Failed to save builds:", error);
-      }
-    };
-    const timer = setTimeout(saveBuilds, 500);
-    return () => clearTimeout(timer);
-  }, [builds, buildsLoaded]);
-
   const handleAddBuild = (e: React.FormEvent) => {
     e.preventDefault();
     const newBuild: ClassBuild = {
@@ -389,64 +451,14 @@ export default function App() {
   const selectedBuild = useMemo(() => builds.find(b => b.id === selectedBuildId), [builds, selectedBuildId]);
 
   // Login State
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    return localStorage.getItem('leprechaun_logged_in') === 'true';
-  });
-  const [isAdmin, setIsAdmin] = useState(() => {
-    return localStorage.getItem('leprechaun_is_admin') === 'true';
-  });
+  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('leprechaun_logged_in') === 'true');
+  const [isAdmin, setIsAdmin] = useState(() => localStorage.getItem('leprechaun_is_admin') === 'true');
 
-  // Site Settings State
-  const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
-    const saved = localStorage.getItem('leprechaun_site_settings');
-    if (saved) return JSON.parse(saved);
-    return {
-      siteTitle: 'Leprechaun Village',
-      clanIconUrl: 'https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png',
-      mainPageIconUrl: 'https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png',
-      backgroundUrl: '',
-      primaryColor: '#10b981', // emerald-500
-      accentColor: '#facc15', // yellow-400
-      fontColor: '#ecfdf5', // emerald-50
-      effectsEnabled: true
-    };
-  });
 
-  useEffect(() => {
-    localStorage.setItem('leprechaun_site_settings', JSON.stringify(siteSettings));
-    
-    // Update document title
-    document.title = siteSettings.siteTitle;
-    
-    // Update favicon
-    const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
-    if (link) {
-      link.href = siteSettings.clanIconUrl;
-    } else {
-      const newLink = document.createElement('link');
-      newLink.rel = 'icon';
-      newLink.href = siteSettings.clanIconUrl;
-      document.head.appendChild(newLink);
-    }
-  }, [siteSettings]);
-
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [loginUser, setLoginUser] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState(false);
 
-  const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('leprechaun_users');
-    if (saved) return JSON.parse(saved);
-    return [
-      { id: '1', username: 'admin', password: 'admin123', role: 'admin' },
-      { id: '2', username: 'player', password: '1234', role: 'player' }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('leprechaun_users', JSON.stringify(users));
-  }, [users]);
 
   const [userForm, setUserForm] = useState({ username: '', password: '', role: 'player' as 'admin' | 'player' });
 
@@ -478,15 +490,6 @@ export default function App() {
   const [adminTab, setAdminTab] = useState<'roster' | 'users'>('roster');
 
   // Utilities State
-  const [utilities, setUtilities] = useState<UtilityPost[]>(() => {
-    const saved = localStorage.getItem('leprechaun_utilities');
-    if (saved) return JSON.parse(saved);
-    return [];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('leprechaun_utilities', JSON.stringify(utilities));
-  }, [utilities]);
 
   const [isUtilitiesOpen, setIsUtilitiesOpen] = useState(false);
   const [utilitySearch, setUtilitySearch] = useState('');
@@ -498,23 +501,6 @@ export default function App() {
   const [utilityForm, setUtilityForm] = useState({ title: '', content: '', category: '' });
   const [newCategoryName, setNewCategoryName] = useState('');
 
-  const [utilityCategories, setUtilityCategories] = useState<string[]>(() => {
-    const saved = localStorage.getItem('leprechaun_utility_categories');
-    if (saved) return JSON.parse(saved);
-    return ['Geral', 'Guias', 'Dicas', 'Anúncios', 'Outros'];
-  });
-
-  const [playerAllowedCategory, setPlayerAllowedCategory] = useState<string>(() => {
-    return localStorage.getItem('leprechaun_player_allowed_category') || '';
-  });
-
-  useEffect(() => {
-    localStorage.setItem('leprechaun_utility_categories', JSON.stringify(utilityCategories));
-  }, [utilityCategories]);
-
-  useEffect(() => {
-    localStorage.setItem('leprechaun_player_allowed_category', playerAllowedCategory);
-  }, [playerAllowedCategory]);
 
   useEffect(() => {
     if (!utilityForm.category && utilityCategories.length > 0) {
@@ -704,11 +690,6 @@ export default function App() {
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
-  // Save custom events to localStorage
-  useEffect(() => {
-    localStorage.setItem('omega_custom_events', JSON.stringify(customEvents));
-  }, [customEvents]);
 
   // Save notification settings to localStorage
   useEffect(() => {
@@ -1531,194 +1512,6 @@ export default function App() {
               </div>
             </div>
           </motion.div>
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {isSettingsOpen && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsSettingsOpen(false)}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[250]"
-            />
-            <motion.div 
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed top-0 right-0 h-full w-full md:w-[450px] bg-zinc-950/95 backdrop-blur-2xl border-l border-white/10 z-[300] shadow-2xl flex flex-col"
-            >
-              {/* Sidebar Header */}
-              <div className="p-6 border-b border-white/10 flex items-center justify-between bg-white/5">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-emerald-500/20 rounded-xl border border-emerald-500/40">
-                    <Palette className="text-emerald-500" size={24} />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-black text-white tracking-tight">Identidade Visual</h2>
-                    <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">Personalização Global</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setIsSettingsOpen(false)}
-                  className="p-2 text-zinc-500 hover:text-white hover:bg-white/10 rounded-full transition-all"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-
-              {/* Sidebar Content */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-                {/* Site Info */}
-                <div className="space-y-4">
-                  <h3 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest border-b border-emerald-500/20 pb-2">Informações Básicas</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">Título do Site</label>
-                      <input 
-                        type="text" 
-                        value={siteSettings.siteTitle}
-                        onChange={(e) => setSiteSettings({...siteSettings, siteTitle: e.target.value})}
-                        className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">URL do Ícone do Clã (Favicon/Header)</label>
-                      <input 
-                        type="text" 
-                        value={siteSettings.clanIconUrl}
-                        onChange={(e) => setSiteSettings({...siteSettings, clanIconUrl: e.target.value})}
-                        className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">URL do Ícone Principal (Pedra/Centro)</label>
-                      <input 
-                        type="text" 
-                        value={siteSettings.mainPageIconUrl}
-                        onChange={(e) => setSiteSettings({...siteSettings, mainPageIconUrl: e.target.value})}
-                        className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Background & Colors */}
-                <div className="space-y-4">
-                  <h3 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest border-b border-emerald-500/20 pb-2">Cores & Estilo</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">URL do Background da Página</label>
-                      <input 
-                        type="text" 
-                        value={siteSettings.backgroundUrl}
-                        onChange={(e) => setSiteSettings({...siteSettings, backgroundUrl: e.target.value})}
-                        className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
-                        placeholder="Deixe vazio para o padrão escuro"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">Cor Primária</label>
-                        <div className="flex gap-2">
-                          <input 
-                            type="color" 
-                            value={siteSettings.primaryColor}
-                            onChange={(e) => setSiteSettings({...siteSettings, primaryColor: e.target.value})}
-                            className="w-10 h-10 bg-zinc-900 border border-white/10 rounded-lg cursor-pointer"
-                          />
-                          <input 
-                            type="text" 
-                            value={siteSettings.primaryColor}
-                            onChange={(e) => setSiteSettings({...siteSettings, primaryColor: e.target.value})}
-                            className="flex-1 bg-zinc-900 border border-white/10 rounded-lg px-3 text-xs text-white uppercase"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">Cor de Destaque</label>
-                        <div className="flex gap-2">
-                          <input 
-                            type="color" 
-                            value={siteSettings.accentColor}
-                            onChange={(e) => setSiteSettings({...siteSettings, accentColor: e.target.value})}
-                            className="w-10 h-10 bg-zinc-900 border border-white/10 rounded-lg cursor-pointer"
-                          />
-                          <input 
-                            type="text" 
-                            value={siteSettings.accentColor}
-                            onChange={(e) => setSiteSettings({...siteSettings, accentColor: e.target.value})}
-                            className="flex-1 bg-zinc-900 border border-white/10 rounded-lg px-3 text-xs text-white uppercase"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">Cor da Fonte Global</label>
-                      <div className="flex gap-2">
-                        <input 
-                          type="color" 
-                          value={siteSettings.fontColor}
-                          onChange={(e) => setSiteSettings({...siteSettings, fontColor: e.target.value})}
-                          className="w-10 h-10 bg-zinc-900 border border-white/10 rounded-lg cursor-pointer"
-                        />
-                        <input 
-                          type="text" 
-                          value={siteSettings.fontColor}
-                          onChange={(e) => setSiteSettings({...siteSettings, fontColor: e.target.value})}
-                          className="flex-1 bg-zinc-900 border border-white/10 rounded-lg px-3 text-xs text-white uppercase"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Effects */}
-                <div className="space-y-4">
-                  <h3 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest border-b border-emerald-500/20 pb-2">Efeitos & Extras</h3>
-                  <label className="flex items-center justify-between p-3 bg-zinc-900/50 rounded-xl border border-white/5 cursor-pointer group">
-                    <div className="flex items-center gap-3">
-                      <Sparkles size={18} className="text-emerald-500" />
-                      <div>
-                        <p className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">Efeitos Visuais</p>
-                        <p className="text-[10px] text-zinc-500">Partículas e animações de brilho</p>
-                      </div>
-                    </div>
-                    <input 
-                      type="checkbox" 
-                      checked={siteSettings.effectsEnabled}
-                      onChange={(e) => setSiteSettings({...siteSettings, effectsEnabled: e.target.checked})}
-                      className="w-5 h-5 rounded border-zinc-700 bg-zinc-900 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-950"
-                    />
-                  </label>
-                </div>
-
-                <div className="pt-6">
-                  <button 
-                    onClick={() => {
-                      if (confirm('Deseja resetar para as configurações padrão?')) {
-                        setSiteSettings({
-                          siteTitle: 'Leprechaun Village',
-                          clanIconUrl: 'https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png',
-                          mainPageIconUrl: 'https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png',
-                          backgroundUrl: '',
-                          primaryColor: '#10b981',
-                          accentColor: '#facc15',
-                          fontColor: '#ecfdf5',
-                          effectsEnabled: true
-                        });
-                      }
-                    }}
-                    className="w-full py-3 border border-red-500/30 text-red-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all"
-                  >
-                    Resetar Identidade
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </>
         )}
       </AnimatePresence>
       <AnimatePresence>
@@ -2556,16 +2349,6 @@ export default function App() {
               <span className="hidden lg:inline text-xs font-black uppercase tracking-tighter">Utilities</span>
             </button>
 
-            {isAdmin && (
-              <button 
-                onClick={() => setIsSettingsOpen(true)}
-                className="p-2 rounded-lg bg-zinc-500/20 text-zinc-400 hover:bg-zinc-500 hover:text-white transition-all border border-zinc-500/30 shadow-lg shadow-zinc-500/10 flex items-center gap-2"
-                title="Identidade Visual"
-              >
-                <Palette size={20} />
-                <span className="hidden lg:inline text-xs font-black uppercase tracking-tighter">Design</span>
-              </button>
-            )}
 
             <button 
               onClick={() => setIsBuildsOpen(true)}

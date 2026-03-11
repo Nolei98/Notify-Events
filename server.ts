@@ -3,81 +3,97 @@ import { createServer as createViteServer } from "vite";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { createServer } from "http";
+import { Server } from "socket.io";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const DATA_FILE = path.join(__dirname, "data", "roster.json");
-const BUILDS_FILE = path.join(__dirname, "data", "builds.json");
+const DATA_DIR = path.join(__dirname, "data");
+const FILES = {
+  roster: path.join(DATA_DIR, "roster.json"),
+  builds: path.join(DATA_DIR, "builds.json"),
+  utilities: path.join(DATA_DIR, "utilities.json"),
+  events: path.join(DATA_DIR, "events.json"),
+  users: path.join(DATA_DIR, "users.json"),
+  categories: path.join(DATA_DIR, "categories.json"),
+  settings: path.join(DATA_DIR, "settings.json") // We'll keep this but the user wants to remove the UI for it
+};
 
 // Ensure data directory exists
-if (!fs.existsSync(path.join(__dirname, "data"))) {
-  fs.mkdirSync(path.join(__dirname, "data"));
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR);
 }
 
-// Initial data if file doesn't exist
-if (!fs.existsSync(DATA_FILE)) {
-  const initialData = {
-    roster: [
-      { id: '1', name: 'Nolei', className: 'Lord Knight', confirmed: true },
-      { id: '2', name: 'Creative', className: 'High Priest', confirmed: null },
-      { id: '3', name: 'Player1', className: 'Sniper', confirmed: false },
-    ],
-    woeSchedule: { days: ['Terça', 'Quinta', 'Sábado'], time: '20:00' }
-  };
-  fs.writeFileSync(DATA_FILE, JSON.stringify(initialData, null, 2));
-}
+// Initialize files if they don't exist
+const INITIAL_DATA = {
+  roster: { roster: [], woeSchedule: { days: ['Terça', 'Quinta', 'Sábado'], startTime: '20:00', endTime: '21:00' } },
+  builds: { builds: [] },
+  utilities: { posts: [], categories: ['Geral', 'Guias', 'MvP', 'PvP', 'Builds'], playerAllowedCategory: '' },
+  events: { customEvents: [] },
+  users: { users: [] },
+  categories: { categories: ['Geral', 'Guias', 'MvP', 'PvP', 'Builds'] },
+  settings: {
+    siteTitle: 'Leprechaun Village',
+    clanIconUrl: 'https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png',
+    mainPageIconUrl: 'https://i.pinimg.com/originals/3f/05/d8/3f05d83924eef0ed0561fa2352a7b9d4.gif',
+    backgroundImageUrl: 'https://picsum.photos/seed/ragnarok/1920/1080?blur=2',
+    primaryColor: '#10b981',
+    accentColor: '#fbbf24',
+    fontColor: '#ffffff',
+    effectsEnabled: true
+  }
+};
 
-if (!fs.existsSync(BUILDS_FILE)) {
-  const initialBuilds = {
-    builds: []
-  };
-  fs.writeFileSync(BUILDS_FILE, JSON.stringify(initialBuilds, null, 2));
-}
+Object.entries(FILES).forEach(([key, filePath]) => {
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, JSON.stringify(INITIAL_DATA[key as keyof typeof INITIAL_DATA], null, 2));
+  }
+});
 
 async function startServer() {
   const app = express();
+  const httpServer = createServer(app);
+  const io = new Server(httpServer);
   const PORT = 3000;
 
   app.use(express.json());
 
+  // Helper to read/write data
+  const readData = (key: keyof typeof FILES) => {
+    try {
+      return JSON.parse(fs.readFileSync(FILES[key], "utf-8"));
+    } catch (e) {
+      return INITIAL_DATA[key];
+    }
+  };
+
+  const writeData = (key: keyof typeof FILES, data: any) => {
+    fs.writeFileSync(FILES[key], JSON.stringify(data, null, 2));
+  };
+
   // API Routes
-  app.get("/api/data", (req, res) => {
-    try {
-      const data = fs.readFileSync(DATA_FILE, "utf-8");
-      res.json(JSON.parse(data));
-    } catch (error) {
-      res.status(500).json({ error: "Failed to read data" });
-    }
+  app.get("/api/all-data", (req, res) => {
+    const allData = Object.keys(FILES).reduce((acc, key) => {
+      acc[key] = readData(key as keyof typeof FILES);
+      return acc;
+    }, {} as any);
+    res.json(allData);
   });
 
-  app.post("/api/data", (req, res) => {
-    try {
-      const newData = req.body;
-      fs.writeFileSync(DATA_FILE, JSON.stringify(newData, null, 2));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to save data" });
-    }
-  });
+  // Socket.io for real-time updates
+  io.on("connection", (socket) => {
+    console.log("A user connected");
 
-  app.get("/api/builds", (req, res) => {
-    try {
-      const data = fs.readFileSync(BUILDS_FILE, "utf-8");
-      res.json(JSON.parse(data));
-    } catch (error) {
-      res.status(500).json({ error: "Failed to read builds" });
-    }
-  });
+    socket.on("update-data", ({ key, data }: { key: keyof typeof FILES, data: any }) => {
+      writeData(key, data);
+      // Broadcast to all other clients
+      socket.broadcast.emit("data-updated", { key, data });
+    });
 
-  app.post("/api/builds", (req, res) => {
-    try {
-      const newData = req.body;
-      fs.writeFileSync(BUILDS_FILE, JSON.stringify(newData, null, 2));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to save builds" });
-    }
+    socket.on("disconnect", () => {
+      console.log("User disconnected");
+    });
   });
 
   // Vite middleware for development
@@ -94,7 +110,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
