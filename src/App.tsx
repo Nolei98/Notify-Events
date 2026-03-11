@@ -260,17 +260,20 @@ export default function App() {
 
   // Socket Connection and Initial Fetch
   useEffect(() => {
-    const socket = io({
-      transports: ['websocket', 'polling']
+    const socket = io(window.location.origin, {
+      path: '/socket.io/',
+      transports: ['polling', 'websocket'],
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
     });
     socketRef.current = socket;
 
     socket.on("connect", () => {
-      console.log("Connected to server");
+      console.log("Connected to server with ID:", socket.id);
     });
 
     socket.on("connect_error", (error) => {
-      console.error("Connection error:", error);
+      console.error("Socket.io Connection Error:", error.message, error);
     });
 
     const fetchAllData = async () => {

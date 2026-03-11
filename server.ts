@@ -63,7 +63,9 @@ async function startServer() {
     cors: {
       origin: "*",
       methods: ["GET", "POST"]
-    }
+    },
+    path: "/socket.io/",
+    transports: ["polling", "websocket"]
   });
   const PORT = 3000;
 
@@ -94,6 +96,10 @@ async function startServer() {
   };
 
   // API Routes
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
   app.get("/api/all-data", (req, res) => {
     console.log("Fetching all data");
     const allData = Object.keys(FILES).reduce((acc, key) => {
@@ -106,6 +112,10 @@ async function startServer() {
   // Socket.io for real-time updates
   io.on("connection", (socket) => {
     console.log(`A user connected: ${socket.id}`);
+
+    socket.on("error", (error) => {
+      console.error(`Socket error for ${socket.id}:`, error);
+    });
 
     socket.on("update-data", ({ key, data }: { key: keyof typeof FILES, data: any }) => {
       console.log(`Data update for ${key} from ${socket.id}`);
