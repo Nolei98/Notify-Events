@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { io, Socket } from 'socket.io-client';
 import { 
   Clock, 
   Bell, 
@@ -154,14 +153,13 @@ const playNotificationSound = async () => {
 };
 
 // Glitter Effect Component for selected filters
-const GlitterEffect = ({ enabled = true, color = '#fbbf24' }: { enabled?: boolean, color?: string }) => {
-  if (!enabled) return null;
+const GlitterEffect = () => {
   return (
     <div className="absolute inset-0 pointer-events-none z-0">
       {[...Array(12)].map((_, i) => (
         <motion.div
           key={i}
-          className="absolute w-1 h-1 rounded-full"
+          className="absolute w-1 h-1 bg-yellow-200 rounded-full"
           initial={{ 
             opacity: 0, 
             scale: 0,
@@ -184,8 +182,7 @@ const GlitterEffect = ({ enabled = true, color = '#fbbf24' }: { enabled?: boolea
           style={{
             left: "50%",
             top: "50%",
-            backgroundColor: color,
-            boxShadow: `0 0 10px 2px ${color}`,
+            boxShadow: '0 0 10px 2px rgba(253, 224, 71, 0.9)',
           }}
         />
       ))}
@@ -194,7 +191,6 @@ const GlitterEffect = ({ enabled = true, color = '#fbbf24' }: { enabled?: boolea
 };
 
 export default function App() {
-  const socketRef = useRef<Socket | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
     const saved = localStorage.getItem('omega_notif_enabled');
@@ -222,179 +218,68 @@ export default function App() {
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
   const [notifiedAlerts, setNotifiedAlerts] = useState<Set<string>>(new Set());
   
-  // Shared State (Synced with Server)
-  const [customEvents, setCustomEvents] = useState<ROEvent[]>([]);
-  const [roster, setRoster] = useState<RosterMember[]>([]);
-  const [woeSchedule, setWoeSchedule] = useState<WoESchedule>({ days: ['Terça', 'Quinta', 'Sábado'], startTime: '20:00', endTime: '21:00' });
-  const [classTypes, setClassTypes] = useState<string[]>(['Paladin', 'Professor', 'Clown', 'High Wizard', 'Creator', 'Sniper', 'Stalker', 'Champion']);
-  const [builds, setBuilds] = useState<ClassBuild[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [utilities, setUtilities] = useState<UtilityPost[]>([]);
-  const [utilityCategories, setUtilityCategories] = useState<string[]>(['Geral', 'Guias', 'MvP', 'PvP', 'Builds']);
-  const [playerAllowedCategory, setPlayerAllowedCategory] = useState<string>('');
-  const [siteSettings, setSiteSettings] = useState({
-    siteTitle: 'Leprechaun Village',
-    clanIconUrl: 'https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png',
-    mainPageIconUrl: 'https://i.pinimg.com/originals/3f/05/d8/3f05d83924eef0ed0561fa2352a7b9d4.gif',
-    backgroundUrl: 'https://picsum.photos/seed/ragnarok/1920/1080?blur=2',
-    primaryColor: '#10b981',
-    accentColor: '#fbbf24',
-    fontColor: '#ffffff',
-    effectsEnabled: true
+  // Staff Panel State
+  const [isStaffPanelOpen, setIsStaffPanelOpen] = useState(false);
+  const [customEvents, setCustomEvents] = useState<ROEvent[]>(() => {
+    const saved = localStorage.getItem('omega_custom_events');
+    return saved ? JSON.parse(saved) : [];
   });
   
-  // Local UI State
-  const [isStaffPanelOpen, setIsStaffPanelOpen] = useState(false);
+  // Form State
   const [formTime, setFormTime] = useState('');
   const [formTitle, setFormTitle] = useState('');
   const [formPrize, setFormPrize] = useState('');
   const [formDesc, setFormDesc] = useState('');
   const [formCategory, setFormCategory] = useState<ROEvent['category']>('Special');
   const [showScrollTop, setShowScrollTop] = useState(false);
+
+  // Roster State
   const [isRosterOpen, setIsRosterOpen] = useState(false);
+  const [roster, setRoster] = useState<RosterMember[]>([]);
+  const [woeSchedule, setWoeSchedule] = useState<WoESchedule>({ days: ['Terça', 'Quinta', 'Sábado'], startTime: '20:00', endTime: '21:00' });
+  const [classTypes, setClassTypes] = useState<string[]>(['Paladin', 'Professor', 'Clown', 'High Wizard', 'Creator', 'Sniper', 'Stalker', 'Champion']);
   const [dataLoaded, setDataLoaded] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false); // Re-adding this state for internal logic if needed, though UI is removed
 
-  // Socket Connection and Initial Fetch
+  // Fetch initial data from server
   useEffect(() => {
-    const socket = io();
-    socketRef.current = socket;
-
-    const fetchAllData = async () => {
+    const fetchData = async () => {
       try {
-        const response = await fetch('/api/all-data');
+        const response = await fetch('/api/data');
         if (response.ok) {
           const data = await response.json();
-          setRoster(data.roster.roster || []);
-          setWoeSchedule(data.roster.woeSchedule || { days: ['Terça', 'Quinta', 'Sábado'], startTime: '20:00', endTime: '21:00' });
-          setBuilds(data.builds.builds || []);
-          setUtilities(data.utilities.posts || []);
-          setUtilityCategories(data.utilities.categories || ['Geral', 'Guias', 'MvP', 'PvP', 'Builds']);
-          setPlayerAllowedCategory(data.utilities.playerAllowedCategory || '');
-          setCustomEvents(data.events.customEvents || []);
-          setUsers(data.users.users || [
-            { id: '1', username: 'admin', password: 'admin123', role: 'admin' },
-            { id: '2', username: 'player', password: '1234', role: 'player' }
-          ]);
-          setSiteSettings(data.settings || {
-            siteTitle: 'Leprechaun Village',
-            clanIconUrl: 'https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png',
-            mainPageIconUrl: 'https://i.pinimg.com/originals/3f/05/d8/3f05d83924eef0ed0561fa2352a7b9d4.gif',
-            backgroundUrl: 'https://picsum.photos/seed/ragnarok/1920/1080?blur=2',
-            primaryColor: '#10b981',
-            accentColor: '#fbbf24',
-            fontColor: '#ffffff',
-            effectsEnabled: true
-          });
+          setRoster(data.roster || []);
+          setWoeSchedule(data.woeSchedule || { days: ['Terça', 'Quinta', 'Sábado'], startTime: '20:00', endTime: '21:00' });
+          if (data.classTypes && data.classTypes.length > 0) {
+            setClassTypes(data.classTypes);
+          }
           setDataLoaded(true);
         }
       } catch (error) {
-        console.error("Failed to fetch all data:", error);
+        console.error("Failed to fetch shared data:", error);
       }
     };
-
-    fetchAllData();
-
-    socket.on("data-updated", ({ key, data }: { key: string, data: any }) => {
-      switch (key) {
-        case 'roster':
-          setRoster(data.roster);
-          setWoeSchedule(data.woeSchedule);
-          break;
-        case 'builds':
-          setBuilds(data.builds);
-          break;
-        case 'utilities':
-          setUtilities(data.posts);
-          setUtilityCategories(data.categories);
-          setPlayerAllowedCategory(data.playerAllowedCategory);
-          break;
-        case 'events':
-          setCustomEvents(data.customEvents);
-          break;
-        case 'users':
-          setUsers(data.users);
-          break;
-        case 'settings':
-          setSiteSettings(data);
-          break;
-      }
-    });
-
-    return () => {
-      socket.disconnect();
-    };
+    fetchData();
   }, []);
 
-  // Helper to sync data to server
-  const syncData = (key: string, data: any) => {
-    if (socketRef.current) {
-      socketRef.current.emit("update-data", { key, data });
-    }
-  };
-
-  // Sync effects for each shared state
+  // Save data to server whenever it changes
   useEffect(() => {
     if (!dataLoaded) return;
-    const timer = setTimeout(() => {
-      syncData('roster', { roster, woeSchedule });
-    }, 500);
+    
+    const saveData = async () => {
+      try {
+        await fetch('/api/data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roster, woeSchedule, classTypes })
+        });
+      } catch (error) {
+        console.error("Failed to save shared data:", error);
+      }
+    };
+    
+    const timer = setTimeout(saveData, 500); // Debounce saves
     return () => clearTimeout(timer);
-  }, [roster, woeSchedule, dataLoaded]);
-
-  useEffect(() => {
-    if (!dataLoaded) return;
-    const timer = setTimeout(() => {
-      syncData('builds', { builds });
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [builds, dataLoaded]);
-
-  useEffect(() => {
-    if (!dataLoaded) return;
-    const timer = setTimeout(() => {
-      syncData('utilities', { posts: utilities, categories: utilityCategories, playerAllowedCategory });
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [utilities, utilityCategories, playerAllowedCategory, dataLoaded]);
-
-  useEffect(() => {
-    if (!dataLoaded) return;
-    const timer = setTimeout(() => {
-      syncData('events', { customEvents });
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [customEvents, dataLoaded]);
-
-  useEffect(() => {
-    if (!dataLoaded) return;
-    const timer = setTimeout(() => {
-      syncData('users', { users });
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [users, dataLoaded]);
-
-  useEffect(() => {
-    if (!dataLoaded) return;
-    const timer = setTimeout(() => {
-      syncData('settings', siteSettings);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [siteSettings, dataLoaded]);
-
-  useEffect(() => {
-    if (!dataLoaded) return;
-    document.title = siteSettings.siteTitle;
-    const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
-    if (link) {
-      link.href = siteSettings.clanIconUrl;
-    } else {
-      const newLink = document.createElement('link');
-      newLink.rel = 'icon';
-      newLink.href = siteSettings.clanIconUrl;
-      document.head.appendChild(newLink);
-    }
-  }, [siteSettings, dataLoaded]);
+  }, [roster, woeSchedule, classTypes, dataLoaded]);
 
   // Admin Form for Roster
   const [isRosterAdminOpen, setIsRosterAdminOpen] = useState(false);
@@ -404,6 +289,7 @@ export default function App() {
 
   // Builds State
   const [isBuildsOpen, setIsBuildsOpen] = useState(false);
+  const [builds, setBuilds] = useState<ClassBuild[]>([]);
   const [selectedBuildId, setSelectedBuildId] = useState<string | null>(null);
   const [isBuildAdminOpen, setIsBuildAdminOpen] = useState(false);
   const [buildsLoaded, setBuildsLoaded] = useState(false);
@@ -429,6 +315,44 @@ export default function App() {
     }
   });
 
+  // Fetch builds from server
+  useEffect(() => {
+    const fetchBuilds = async () => {
+      try {
+        const response = await fetch('/api/builds');
+        if (response.ok) {
+          const data = await response.json();
+          setBuilds(data.builds || []);
+          setBuildsLoaded(true);
+          if (data.builds?.length > 0) {
+            setSelectedBuildId(data.builds[0].id);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch builds:", error);
+      }
+    };
+    fetchBuilds();
+  }, []);
+
+  // Save builds to server
+  useEffect(() => {
+    if (!buildsLoaded) return;
+    const saveBuilds = async () => {
+      try {
+        await fetch('/api/builds', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ builds })
+        });
+      } catch (error) {
+        console.error("Failed to save builds:", error);
+      }
+    };
+    const timer = setTimeout(saveBuilds, 500);
+    return () => clearTimeout(timer);
+  }, [builds, buildsLoaded]);
+
   const handleAddBuild = (e: React.FormEvent) => {
     e.preventDefault();
     const newBuild: ClassBuild = {
@@ -451,14 +375,28 @@ export default function App() {
   const selectedBuild = useMemo(() => builds.find(b => b.id === selectedBuildId), [builds, selectedBuildId]);
 
   // Login State
-  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('leprechaun_logged_in') === 'true');
-  const [isAdmin, setIsAdmin] = useState(() => localStorage.getItem('leprechaun_is_admin') === 'true');
-
-
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return localStorage.getItem('leprechaun_logged_in') === 'true';
+  });
+  const [isAdmin, setIsAdmin] = useState(() => {
+    return localStorage.getItem('leprechaun_is_admin') === 'true';
+  });
   const [loginUser, setLoginUser] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState(false);
 
+  const [users, setUsers] = useState<User[]>(() => {
+    const saved = localStorage.getItem('leprechaun_users');
+    if (saved) return JSON.parse(saved);
+    return [
+      { id: '1', username: 'admin', password: 'admin123', role: 'admin' },
+      { id: '2', username: 'player', password: '1234', role: 'player' }
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('leprechaun_users', JSON.stringify(users));
+  }, [users]);
 
   const [userForm, setUserForm] = useState({ username: '', password: '', role: 'player' as 'admin' | 'player' });
 
@@ -490,6 +428,15 @@ export default function App() {
   const [adminTab, setAdminTab] = useState<'roster' | 'users'>('roster');
 
   // Utilities State
+  const [utilities, setUtilities] = useState<UtilityPost[]>(() => {
+    const saved = localStorage.getItem('leprechaun_utilities');
+    if (saved) return JSON.parse(saved);
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('leprechaun_utilities', JSON.stringify(utilities));
+  }, [utilities]);
 
   const [isUtilitiesOpen, setIsUtilitiesOpen] = useState(false);
   const [utilitySearch, setUtilitySearch] = useState('');
@@ -501,6 +448,23 @@ export default function App() {
   const [utilityForm, setUtilityForm] = useState({ title: '', content: '', category: '' });
   const [newCategoryName, setNewCategoryName] = useState('');
 
+  const [utilityCategories, setUtilityCategories] = useState<string[]>(() => {
+    const saved = localStorage.getItem('leprechaun_utility_categories');
+    if (saved) return JSON.parse(saved);
+    return ['Geral', 'Guias', 'Dicas', 'Anúncios', 'Outros'];
+  });
+
+  const [playerAllowedCategory, setPlayerAllowedCategory] = useState<string>(() => {
+    return localStorage.getItem('leprechaun_player_allowed_category') || '';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('leprechaun_utility_categories', JSON.stringify(utilityCategories));
+  }, [utilityCategories]);
+
+  useEffect(() => {
+    localStorage.setItem('leprechaun_player_allowed_category', playerAllowedCategory);
+  }, [playerAllowedCategory]);
 
   useEffect(() => {
     if (!utilityForm.category && utilityCategories.length > 0) {
@@ -691,6 +655,11 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Save custom events to localStorage
+  useEffect(() => {
+    localStorage.setItem('omega_custom_events', JSON.stringify(customEvents));
+  }, [customEvents]);
+
   // Save notification settings to localStorage
   useEffect(() => {
     localStorage.setItem('omega_notif_enabled', JSON.stringify(notificationsEnabled));
@@ -845,30 +814,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-emerald-50 font-sans selection:bg-yellow-500/30" style={{ 
-      backgroundImage: siteSettings.backgroundUrl ? `url(${siteSettings.backgroundUrl})` : 'none',
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-      backgroundAttachment: 'fixed',
-      color: siteSettings.fontColor
-    }}>
-      <style>
-        {`
-          :root {
-            --primary-rgb: ${siteSettings.primaryColor};
-            --accent-rgb: ${siteSettings.accentColor};
-          }
-          .custom-primary-text { color: ${siteSettings.primaryColor}; }
-          .custom-primary-bg { background-color: ${siteSettings.primaryColor}; }
-          .custom-primary-border { border-color: ${siteSettings.primaryColor}; }
-          .custom-accent-text { color: ${siteSettings.accentColor}; }
-          .custom-accent-bg { background-color: ${siteSettings.accentColor}; }
-          .custom-accent-border { border-color: ${siteSettings.accentColor}; }
-          
-          /* Override some common emerald/yellow classes if needed, 
-             but it's better to use these variables in the JSX */
-        `}
-      </style>
+    <div className="min-h-screen bg-zinc-950 text-emerald-50 font-sans selection:bg-yellow-500/30">
       {/* Background Layer */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         {/* Main Background GIF */}
@@ -893,56 +839,44 @@ export default function App() {
             <motion.div 
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
-              className="w-full max-w-md bg-zinc-900/80 backdrop-blur-2xl border rounded-3xl p-8 shadow-2xl text-center"
-              style={{ borderColor: `${siteSettings.primaryColor}4d` }}
+              className="w-full max-w-md bg-zinc-900/80 backdrop-blur-2xl border border-emerald-500/30 rounded-3xl p-8 shadow-2xl text-center"
             >
               <div className="flex justify-center mb-6">
-                <div 
-                  className="p-3 rounded-full shadow-lg"
-                  style={{ 
-                    background: `linear-gradient(to bottom right, ${siteSettings.primaryColor}, ${siteSettings.accentColor})`,
-                    boxShadow: `0 10px 15px -3px ${siteSettings.primaryColor}4d`
-                  }}
-                >
+                <div className="p-3 bg-gradient-to-br from-emerald-500 to-yellow-500 rounded-full shadow-lg shadow-emerald-500/30">
                   <img 
-                    src={siteSettings.mainPageIconUrl} 
-                    alt="Site Icon" 
+                    src="https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png" 
+                    alt="Leprechaun Icon" 
                     className="w-12 h-12 object-contain"
                     referrerPolicy="no-referrer"
                   />
                 </div>
               </div>
               
-              <h2 
-                className="text-3xl font-black mb-2 bg-clip-text text-transparent"
-                style={{ backgroundImage: `linear-gradient(to right, ${siteSettings.primaryColor}, ${siteSettings.accentColor})` }}
-              >
-                {siteSettings.siteTitle}
+              <h2 className="text-3xl font-black mb-2 bg-gradient-to-r from-emerald-400 to-yellow-400 bg-clip-text text-transparent">
+                Leprechaun Village
               </h2>
-              <p className="text-sm mb-8 font-medium opacity-70" style={{ color: siteSettings.primaryColor }}>
+              <p className="text-emerald-400/70 text-sm mb-8 font-medium">
                 A sorte é só um detalhe, não o todo.
               </p>
 
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="text-left">
-                  <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5 ml-1" style={{ color: siteSettings.primaryColor }}>Usuário</label>
+                  <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1.5 ml-1">Usuário</label>
                   <input 
                     type="text" 
                     value={loginUser}
                     onChange={(e) => setLoginUser(e.target.value)}
-                    className="w-full bg-zinc-950/50 border rounded-xl px-4 py-3 text-white focus:outline-none transition-colors"
-                    style={{ borderColor: `${siteSettings.primaryColor}33` }}
+                    className="w-full bg-emerald-900/20 border border-emerald-500/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 transition-colors"
                     placeholder="Seu usuário"
                   />
                 </div>
                 <div className="text-left">
-                  <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5 ml-1" style={{ color: siteSettings.primaryColor }}>Senha</label>
+                  <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1.5 ml-1">Senha</label>
                   <input 
                     type="password" 
                     value={loginPass}
                     onChange={(e) => setLoginPass(e.target.value)}
-                    className="w-full bg-zinc-950/50 border rounded-xl px-4 py-3 text-white focus:outline-none transition-colors"
-                    style={{ borderColor: `${siteSettings.primaryColor}33` }}
+                    className="w-full bg-emerald-900/20 border border-emerald-500/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 transition-colors"
                     placeholder="Sua senha"
                   />
                 </div>
@@ -959,11 +893,7 @@ export default function App() {
 
                 <button 
                   type="submit"
-                  className="w-full py-4 text-white font-black rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 mt-4"
-                  style={{ 
-                    background: `linear-gradient(to right, ${siteSettings.primaryColor}, ${siteSettings.accentColor})`,
-                    boxShadow: `0 10px 15px -3px ${siteSettings.primaryColor}4d`
-                  }}
+                  className="w-full py-4 bg-gradient-to-r from-emerald-500 to-yellow-500 text-white font-black rounded-xl shadow-lg shadow-emerald-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-4"
                 >
                   <Zap size={20} />
                   ENTRAR NA VILA
@@ -1534,12 +1464,12 @@ export default function App() {
               {/* Sidebar Header */}
               <div className="p-6 border-b border-emerald-500/20 flex items-center justify-between bg-emerald-900/10">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl border" style={{ backgroundColor: `${siteSettings.primaryColor}33`, borderColor: `${siteSettings.primaryColor}66` }}>
-                    <FileText style={{ color: siteSettings.primaryColor }} size={24} />
+                  <div className="p-2 bg-emerald-500/20 rounded-xl border border-emerald-500/40">
+                    <FileText className="text-emerald-500" size={24} />
                   </div>
                   <div>
                     <h2 className="text-xl font-black text-white tracking-tight">Utilities & Blog</h2>
-                    <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: siteSettings.primaryColor }}>Guias e Informações Úteis</p>
+                    <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Guias e Informações Úteis</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1579,13 +1509,12 @@ export default function App() {
                   </div>
                   <div className="relative min-w-[120px]">
                     <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                      <Filter size={14} style={{ color: siteSettings.primaryColor }} />
+                      <Filter size={14} className="text-emerald-500" />
                     </div>
                     <select
                       value={utilityCategory}
                       onChange={(e) => setUtilityCategory(e.target.value)}
-                      className="w-full bg-zinc-950 border border-white/10 rounded-xl pl-9 pr-3 py-2 text-[10px] font-black uppercase tracking-widest focus:outline-none appearance-none cursor-pointer"
-                      style={{ color: siteSettings.primaryColor, borderColor: `${siteSettings.primaryColor}33` }}
+                      className="w-full bg-zinc-950 border border-white/10 rounded-xl pl-9 pr-3 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-500 focus:outline-none focus:border-emerald-500 appearance-none cursor-pointer"
                     >
                       {allCategories.map(cat => (
                         <option key={cat} value={cat}>{cat}</option>
@@ -1683,12 +1612,7 @@ export default function App() {
                         }
                       }
                     }}
-                    className="w-full py-3 rounded-2xl font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 border hover:bg-white hover:text-black"
-                    style={{ 
-                      backgroundColor: `${siteSettings.primaryColor}1a`, 
-                      borderColor: `${siteSettings.primaryColor}4d`,
-                      color: siteSettings.primaryColor
-                    }}
+                    className="w-full py-3 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-emerald-500 font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center gap-2"
                   >
                     <Plus size={18} /> {isUtilityAdminOpen ? (editingUtilityId ? 'Cancelar Edição' : 'Fechar Editor') : 'Nova Postagem'}
                   </button>
@@ -1868,20 +1792,19 @@ export default function App() {
               className="fixed top-0 left-0 h-full w-full md:w-[450px] bg-emerald-950/95 backdrop-blur-2xl border-r border-emerald-500/30 z-[300] shadow-2xl flex flex-col"
             >
               {/* Sidebar Header */}
-              <div className="p-6 border-b flex items-center justify-between" style={{ borderColor: `${siteSettings.primaryColor}33`, backgroundColor: `${siteSettings.primaryColor}1a` }}>
+              <div className="p-6 border-b border-emerald-500/20 flex items-center justify-between bg-emerald-900/20">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl border" style={{ backgroundColor: `${siteSettings.accentColor}33`, borderColor: `${siteSettings.accentColor}66` }}>
-                    <ShieldCheck style={{ color: siteSettings.accentColor }} size={24} />
+                  <div className="p-2 bg-yellow-500/20 rounded-xl border border-yellow-500/40">
+                    <ShieldCheck className="text-yellow-500" size={24} />
                   </div>
                   <div>
                     <h2 className="text-xl font-black text-white tracking-tight">Plantel/Confirmação WoE</h2>
-                    <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: siteSettings.primaryColor }}>{siteSettings.siteTitle}</p>
+                    <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Leprechaun Village</p>
                   </div>
                 </div>
                 <button 
                   onClick={() => setIsRosterOpen(false)}
-                  className="p-2 hover:text-white rounded-full transition-all"
-                  style={{ color: siteSettings.primaryColor }}
+                  className="p-2 text-emerald-500 hover:text-white hover:bg-emerald-800/40 rounded-full transition-all"
                 >
                   <X size={24} />
                 </button>
@@ -1939,15 +1862,13 @@ export default function App() {
                         <div className="flex items-center gap-2 mb-4 p-1 bg-emerald-900/40 rounded-xl border border-emerald-500/10">
                           <button 
                             onClick={() => setAdminTab('roster')}
-                            className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${adminTab === 'roster' ? 'text-white shadow-lg' : 'opacity-60 hover:opacity-100'}`}
-                            style={adminTab === 'roster' ? { backgroundColor: siteSettings.primaryColor, boxShadow: `0 4px 6px -1px ${siteSettings.primaryColor}33` } : { color: siteSettings.primaryColor }}
+                            className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${adminTab === 'roster' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-emerald-500/60 hover:text-emerald-400'}`}
                           >
                             Plantel
                           </button>
                           <button 
                             onClick={() => setAdminTab('users')}
-                            className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${adminTab === 'users' ? 'text-white shadow-lg' : 'opacity-60 hover:opacity-100'}`}
-                            style={adminTab === 'users' ? { backgroundColor: siteSettings.primaryColor, boxShadow: `0 4px 6px -1px ${siteSettings.primaryColor}33` } : { color: siteSettings.primaryColor }}
+                            className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${adminTab === 'users' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-emerald-500/60 hover:text-emerald-400'}`}
                           >
                             Usuários
                           </button>
@@ -2301,37 +2222,28 @@ export default function App() {
       <header className="relative z-[150] bg-white/10 backdrop-blur-[2px] border-b border-white/20 px-6 py-4">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex flex-col items-center text-center md:flex-row md:text-left md:items-center gap-3">
-            <div 
-              className="p-1.5 rounded-full shadow-lg"
-              style={{ 
-                background: `linear-gradient(to bottom right, ${siteSettings.primaryColor}, ${siteSettings.accentColor})`,
-                boxShadow: `0 10px 15px -3px ${siteSettings.primaryColor}4d`
-              }}
-            >
+            <div className="p-1.5 bg-gradient-to-br from-emerald-500 to-yellow-500 rounded-full shadow-lg shadow-emerald-500/30">
               <img 
-                src={siteSettings.clanIconUrl} 
-                alt="Clan Icon" 
+                src="https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png" 
+                alt="Leprechaun Icon" 
                 className="w-10 h-10 object-contain animate-pulse"
                 referrerPolicy="no-referrer"
               />
             </div>
             <div>
-              <h1 
-                className="text-xl md:text-2xl font-black tracking-tight bg-clip-text text-transparent"
-                style={{ backgroundImage: `linear-gradient(to right, ${siteSettings.primaryColor}, ${siteSettings.accentColor}, ${siteSettings.primaryColor})` }}
-              >
-                {siteSettings.siteTitle}
+              <h1 className="text-xl md:text-2xl font-black tracking-tight bg-gradient-to-r from-emerald-400 via-yellow-400 to-emerald-400 bg-clip-text text-transparent">
+                Leprechaun Village
               </h1>
-              <p className="text-xs font-mono flex flex-wrap items-center justify-center md:justify-start gap-2" style={{ color: `${siteSettings.primaryColor}b3` }}>
+              <p className="text-xs text-emerald-400/70 font-mono flex flex-wrap items-center justify-center md:justify-start gap-2">
                 <span className="flex items-center gap-2">
-                  <Coins size={12} style={{ color: siteSettings.accentColor }} />
+                  <Coins size={12} className="text-yellow-500" />
                   SERVER TIME: {currentTime.toLocaleTimeString()}
                 </span>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter flex items-center gap-1 ${
                   notificationsEnabled && soundEnabled 
-                  ? 'animate-pulse' 
+                  ? 'bg-emerald-500/20 text-emerald-400 animate-pulse' 
                   : 'bg-red-500/20 text-red-400'
-                }`} style={notificationsEnabled && soundEnabled ? { backgroundColor: `${siteSettings.primaryColor}33`, color: siteSettings.primaryColor } : {}}>
+                }`}>
                   <Zap size={10} />
                   {notificationsEnabled && soundEnabled ? 'Notificações Ativas' : 'Alertas Desligados'}
                 </span>
@@ -2348,7 +2260,6 @@ export default function App() {
               <FileText size={20} />
               <span className="hidden lg:inline text-xs font-black uppercase tracking-tighter">Utilities</span>
             </button>
-
 
             <button 
               onClick={() => setIsBuildsOpen(true)}
@@ -2464,10 +2375,9 @@ export default function App() {
         {/* Magic Stone Decorative Section */}
         <div className="flex justify-center mb-6">
           <img 
-            src={siteSettings.mainPageIconUrl} 
+            src="https://i.pinimg.com/originals/3f/05/d8/3f05d83924eef0ed0561fa2352a7b9d4.gif" 
             alt="Magic Stone" 
-            className="w-32 h-32 object-contain"
-            style={{ filter: `drop-shadow(0 0 15px ${siteSettings.primaryColor}66)` }}
+            className="w-32 h-32 object-contain drop-shadow-[0_0_15px_rgba(16,185,129,0.4)]"
             referrerPolicy="no-referrer"
           />
         </div>
@@ -2483,16 +2393,11 @@ export default function App() {
               onClick={() => setSelectedCategory(cat)}
               className={`relative px-4 py-1.5 rounded-full text-sm font-bold transition-all backdrop-blur-md border ${
                 selectedCategory === cat 
-                ? 'text-white shadow-md' 
-                : 'bg-zinc-950/70 border-white/10 hover:bg-zinc-900/80 hover:text-white'
+                ? 'bg-gradient-to-r from-emerald-500 to-yellow-500 text-white shadow-md shadow-emerald-500/20 border-emerald-400' 
+                : 'bg-emerald-950/70 text-emerald-400 border-emerald-500/30 hover:bg-emerald-900/80 hover:text-white'
               }`}
-              style={selectedCategory === cat ? { 
-                background: `linear-gradient(to right, ${siteSettings.primaryColor}, ${siteSettings.accentColor})`,
-                boxShadow: `0 4px 6px -1px ${siteSettings.primaryColor}33`,
-                borderColor: siteSettings.accentColor
-              } : { color: `${siteSettings.primaryColor}cc` }}
             >
-              {selectedCategory === cat && <GlitterEffect enabled={siteSettings.effectsEnabled} color={siteSettings.accentColor} />}
+              {selectedCategory === cat && <GlitterEffect />}
               <span className="relative z-10">{cat}</span>
             </button>
           ))}
@@ -2507,10 +2412,9 @@ export default function App() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.05 }}
-              className={`group relative bg-white/10 backdrop-blur-[2px] border border-white/20 rounded-2xl p-5 hover:bg-white/20 transition-all overflow-hidden ${
-                instance.diff <= 10 ? 'ring-2' : ''
+              className={`group relative bg-white/10 backdrop-blur-[2px] border border-white/20 rounded-2xl p-5 hover:border-yellow-500/40 hover:bg-white/20 transition-all overflow-hidden ${
+                instance.diff <= 10 ? 'ring-2 ring-emerald-500/30' : ''
               }`}
-              style={instance.diff <= 10 ? { ringColor: `${siteSettings.primaryColor}4d`, borderColor: siteSettings.accentColor } : {}}
             >
               {/* Shine effect on hover */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
@@ -2518,10 +2422,7 @@ export default function App() {
               </div>
 
               {/* Gold top border on hover */}
-              <div 
-                className="absolute top-0 left-0 right-0 h-1 opacity-0 group-hover:opacity-100 transition-opacity rounded-t-2xl" 
-                style={{ background: `linear-gradient(to right, ${siteSettings.primaryColor}, ${siteSettings.accentColor}, ${siteSettings.primaryColor})` }}
-              />
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-yellow-500 to-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity rounded-t-2xl" />
               
               {/* Delete button for custom events */}
               {instance.isCustom && (
@@ -2547,10 +2448,7 @@ export default function App() {
 
               <div className="mb-4 flex flex-col items-center text-center md:items-start md:text-left">
                 <div className="flex flex-col items-center md:flex-row md:items-baseline md:gap-2 mb-1">
-                  <span 
-                    className="text-3xl font-black font-mono bg-clip-text text-transparent tracking-tighter"
-                    style={{ backgroundImage: `linear-gradient(to bottom right, #fff, ${siteSettings.primaryColor})` }}
-                  >
+                  <span className="text-3xl font-black font-mono bg-gradient-to-br from-white to-emerald-400 bg-clip-text text-transparent tracking-tighter">
                     {instance.time}
                   </span>
                   <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase mt-1 md:mt-0 ${
@@ -2705,14 +2603,14 @@ export default function App() {
       </AnimatePresence>
 
       {/* Footer Info */}
-      <footer className="max-w-6xl mx-auto px-6 py-12 border-t mt-12 backdrop-blur-md rounded-t-3xl" style={{ borderColor: `${siteSettings.primaryColor}33`, backgroundColor: `${siteSettings.primaryColor}0d` }}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-10 text-sm text-center md:text-left" style={{ color: `${siteSettings.fontColor}cc` }}>
+      <footer className="max-w-6xl mx-auto px-6 py-12 border-t border-emerald-500/30 mt-12 bg-emerald-950/70 backdrop-blur-md rounded-t-3xl">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-10 text-sm text-emerald-50/80 text-center md:text-left">
           <div className="flex flex-col items-center md:items-start">
-            <h4 className="font-bold mb-3 uppercase tracking-wider text-xs" style={{ color: siteSettings.primaryColor }}>Sobre o App</h4>
-            <p className="leading-relaxed max-w-xs md:max-w-none opacity-70">Sincronizado com o horário do servidor. Alertas automáticos 2 minutos antes de cada evento para você não perder nenhum drop da sorte.</p>
+            <h4 className="text-emerald-400 font-bold mb-3 uppercase tracking-wider text-xs">Sobre o App</h4>
+            <p className="leading-relaxed max-w-xs md:max-w-none">Sincronizado com o horário do servidor. Alertas automáticos 2 minutos antes de cada evento para você não perder nenhum drop da sorte.</p>
           </div>
           <div className="flex flex-col items-center md:items-start">
-            <h4 className="font-bold mb-3 uppercase tracking-wider text-xs" style={{ color: siteSettings.primaryColor }}>Legenda da Sorte</h4>
+            <h4 className="text-emerald-400 font-bold mb-3 uppercase tracking-wider text-xs">Legenda da Sorte</h4>
             <ul className="space-y-3">
               <li className="flex items-center justify-center md:justify-start gap-2">
                 <Sword size={14} className="text-red-400" /> 
@@ -2728,23 +2626,23 @@ export default function App() {
               </li>
               <li className="flex items-center justify-center md:justify-start gap-2">
                 <img 
-                  src={siteSettings.mainPageIconUrl} 
-                  alt="Site Icon" 
+                  src="https://images.habbo.com/web_images/habbo-web-articles/spromo_emeralds_rebrand2023.png" 
+                  alt="Leprechaun Icon" 
                   className="w-4 h-4 object-contain"
                   referrerPolicy="no-referrer"
                 /> 
-                <span style={{ color: siteSettings.primaryColor }} className="font-bold underline underline-offset-4 decoration-current">Leprechaun - Eventos Especiais</span>
+                <span className="text-emerald-400 font-bold underline underline-offset-4 decoration-emerald-400/30">Leprechaun - Eventos Especiais</span>
               </li>
             </ul>
           </div>
           <div className="flex flex-col items-center md:items-start">
-            <h4 className="font-bold mb-3 uppercase tracking-wider text-xs" style={{ color: siteSettings.primaryColor }}>Configurações</h4>
-            <p className="leading-relaxed max-w-xs md:max-w-none opacity-70">Ative as notificações do navegador para receber alertas mesmo com a aba em segundo plano. Que a sorte esteja com você!</p>
+            <h4 className="text-emerald-400 font-bold mb-3 uppercase tracking-wider text-xs">Configurações</h4>
+            <p className="leading-relaxed max-w-xs md:max-w-none">Ative as notificações do navegador para receber alertas mesmo com a aba em segundo plano. Que a sorte esteja com você!</p>
           </div>
         </div>
-        <div className="mt-12 pt-8 border-t text-center text-xs font-medium space-y-2" style={{ borderColor: `${siteSettings.primaryColor}1a`, color: siteSettings.primaryColor }}>
-          <p>&copy; 2026 {siteSettings.siteTitle} - Ragnarok Edition.</p>
-          <p className="tracking-widest uppercase text-[10px] opacity-40">Desenvolvido por <span className="font-black">Nolei creative</span></p>
+        <div className="mt-12 pt-8 border-t border-emerald-500/20 text-center text-xs text-emerald-400 font-medium space-y-2">
+          <p>&copy; 2026 Ragnarok Event Tracker - Leprechaun Sorte Edition.</p>
+          <p className="text-emerald-500/60 tracking-widest uppercase text-[10px]">Desenvolvido por <span className="text-emerald-400 font-black">Nolei creative</span></p>
         </div>
       </footer>
 
