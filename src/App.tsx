@@ -48,9 +48,7 @@ import {
   onAuthStateChanged, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
-  signOut,
-  GoogleAuthProvider,
-  signInWithPopup
+  signOut 
 } from 'firebase/auth';
 import { 
   collection, 
@@ -466,25 +464,8 @@ export default function App() {
       // Allow login with email or username (if username, append @guild.com for legacy or if they didn't provide email)
       const email = loginUserInput.includes('@') ? loginUserInput : `${loginUserInput}@guild.com`;
       await signInWithEmailAndPassword(auth, email, loginPass);
-    } catch (error: any) {
+    } catch (error) {
       console.error("Login error:", error);
-      if (error.code === 'auth/operation-not-allowed') {
-        alert("O login por E-mail/Senha está desativado no Console do Firebase. Por favor, use o botão 'Entrar com Google' abaixo.");
-      }
-      setLoginError(true);
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    setIsLoggingIn(true);
-    setLoginError(false);
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (error: any) {
-      console.error("Google Login error:", error);
       setLoginError(true);
     } finally {
       setIsLoggingIn(false);
@@ -1064,29 +1045,6 @@ export default function App() {
                   )}
                   {isLoggingIn ? 'PROCESSANDO...' : (showRegister ? 'CRIAR CONTA' : 'ENTRAR NA VILA')}
                 </button>
-
-                {!showRegister && (
-                  <>
-                    <div className="relative my-6">
-                      <div className="absolute inset-0 flex items-center">
-                        <div className="w-full border-t border-emerald-500/20"></div>
-                      </div>
-                      <div className="relative flex justify-center text-[10px] uppercase tracking-widest font-black">
-                        <span className="bg-zinc-900 px-4 text-emerald-500/50">Ou use</span>
-                      </div>
-                    </div>
-
-                    <button 
-                      type="button"
-                      onClick={handleGoogleLogin}
-                      disabled={isLoggingIn}
-                      className="w-full py-3 bg-white text-zinc-900 font-bold rounded-xl shadow-lg hover:bg-zinc-100 transition-all flex items-center justify-center gap-3"
-                    >
-                      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
-                      ENTRAR COM GOOGLE
-                    </button>
-                  </>
-                )}
 
                 <div className="pt-4">
                   <button
