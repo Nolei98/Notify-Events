@@ -434,8 +434,8 @@ export default function App() {
       
       const newProfile = {
         username: loginUserInput,
-        role: 'player',
-        approved: false
+        role: loginEmail === 'noleirodrigues@gmail.com' ? 'admin' : 'player',
+        approved: loginEmail === 'noleirodrigues@gmail.com'
       };
       await setDoc(doc(db, 'users', user.uid), newProfile);
       setUserProfile(newProfile);
