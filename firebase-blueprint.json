@@ -1,0 +1,94 @@
+{
+  "entities": {
+    "Member": {
+      "title": "Member",
+      "description": "A member of the guild roster",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "className": { "type": "string" },
+        "confirmed": { "type": "boolean" }
+      },
+      "required": ["name", "className"]
+    },
+    "WoeSchedule": {
+      "title": "WoeSchedule",
+      "description": "Schedule for War of Emperium",
+      "type": "object",
+      "properties": {
+        "days": { "type": "array", "items": { "type": "string" } },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" }
+      }
+    },
+    "Build": {
+      "title": "Build",
+      "description": "Character build guide",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "className": { "type": "string" },
+        "description": { "type": "string" },
+        "author": { "type": "string" },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "Utility": {
+      "title": "Utility",
+      "description": "Utility or guide item",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { "type": "string" },
+        "author": { "type": "string" },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "Event": {
+      "title": "Event",
+      "description": "Guild event",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "date": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "UserConfig": {
+      "title": "UserConfig",
+      "description": "User role and profile",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "player"] }
+      }
+    }
+  },
+  "firestore": {
+    "roster": {
+      "schema": "Member",
+      "description": "Collection of guild members"
+    },
+    "settings/woe": {
+      "schema": "WoeSchedule",
+      "description": "WOE schedule settings"
+    },
+    "builds": {
+      "schema": "Build",
+      "description": "Collection of character builds"
+    },
+    "utilities": {
+      "schema": "Utility",
+      "description": "Collection of utilities and guides"
+    },
+    "events": {
+      "schema": "Event",
+      "description": "Collection of guild events"
+    },
+    "users": {
+      "schema": "UserConfig",
+      "description": "User profiles and roles"
+    }
+  }
+}

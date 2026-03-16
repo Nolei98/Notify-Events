@@ -1,0 +1,72 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: users
+    // Fields: username (string), role (string)
+    //
+    // Collection: roster
+    // Fields: name (string), className (string), confirmed (bool)
+    //
+    // Collection: builds
+    // Fields: title, className, description, author, createdAt
+    //
+    // Collection: utilities
+    // Fields: title, content, category, author, createdAt
+    //
+    // Collection: events
+    // Fields: title, date, description
+    //
+    // Collection: settings/woe
+    // Fields: days (list), startTime, endTime
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "noleirodrigues@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Rules
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+
+    match /roster/{memberId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /settings/woe {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /builds/{buildId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /utilities/{utilityId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /events/{eventId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}

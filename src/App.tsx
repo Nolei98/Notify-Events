@@ -43,6 +43,79 @@ import {
   Edit
 } from 'lucide-react';
 import { RAGNAROK_EVENTS, ROEvent } from './constants';
+import { auth, db } from './firebase';
+import { 
+  onAuthStateChanged, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut 
+} from 'firebase/auth';
+import { 
+  collection, 
+  doc, 
+  onSnapshot, 
+  setDoc, 
+  updateDoc, 
+  deleteDoc, 
+  addDoc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  serverTimestamp
+} from 'firebase/firestore';
+import ErrorBoundary from './components/ErrorBoundary';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+const handleFirestoreError = (error: unknown, operationType: OperationType, path: string | null) => {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+};
 
 export interface BuildEquipment {
   name: string;
@@ -99,7 +172,6 @@ export interface WoESchedule {
 interface User {
   id: string;
   username: string;
-  password: string;
   role: 'admin' | 'player';
 }
 
@@ -222,7 +294,6 @@ export default function App() {
   // Staff Panel State
   const [isStaffPanelOpen, setIsStaffPanelOpen] = useState(false);
   const [customEvents, setCustomEvents] = useState<ROEvent[]>([]);
-  const [eventsLoaded, setEventsLoaded] = useState(false);
   
   // Form State
   const [formTime, setFormTime] = useState('');
@@ -237,207 +308,158 @@ export default function App() {
   const [roster, setRoster] = useState<RosterMember[]>([]);
   const [woeSchedule, setWoeSchedule] = useState<WoESchedule>({ days: ['Terça', 'Quinta', 'Sábado'], startTime: '20:00', endTime: '21:00' });
   const [classTypes, setClassTypes] = useState<string[]>(['Paladin', 'Professor', 'Clown', 'High Wizard', 'Creator', 'Sniper', 'Stalker', 'Champion']);
-  const [dataLoaded, setDataLoaded] = useState(false);
 
   // Users State
-  const [users, setUsers] = useState<User[]>([
-    { id: '1', username: 'administrador', password: 'admin123', role: 'admin' },
-    { id: '2', username: 'jogador', password: '1234', role: 'player' }
-  ]);
-  const [usersLoaded, setUsersLoaded] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
 
   // Utilities State
   const [utilities, setUtilities] = useState<UtilityPost[]>([]);
-  const [utilitiesLoaded, setUtilitiesLoaded] = useState(false);
 
   const [utilityCategories, setUtilityCategories] = useState<string[]>(['Geral', 'Guias', 'Dicas', 'Anúncios', 'Outros']);
   const [playerAllowedCategory, setPlayerAllowedCategory] = useState<string>('');
-  const [categoriesLoaded, setCategoriesLoaded] = useState(false);
 
-  // Fetch initial data from server
+  // Firebase Auth State
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
+
+  // Auth Listener
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await fetch('/api/data');
-        if (response.ok) {
-          const data = await response.json();
-          setRoster(data.roster || []);
-          setWoeSchedule(data.woeSchedule || { days: ['Terça', 'Quinta', 'Sábado'], startTime: '20:00', endTime: '21:00' });
-          if (data.classTypes && data.classTypes.length > 0) {
-            setClassTypes(data.classTypes);
-          }
-          setDataLoaded(true);
-        }
-      } catch (error) {
-        console.error("Failed to fetch shared data:", error);
-      }
-    };
-
-    const fetchUsers = async () => {
-      try {
-        const response = await fetch('/api/users');
-        if (response.ok) {
-          const data = await response.json();
-          if (Array.isArray(data) && data.length > 0) {
-            setUsers(data);
-          }
-          setUsersLoaded(true);
-        }
-      } catch (error) {
-        console.error("Failed to fetch users:", error);
-      }
-    };
-
-    const fetchUtilities = async () => {
-      try {
-        const response = await fetch('/api/utilities');
-        if (response.ok) {
-          const data = await response.json();
-          if (Array.isArray(data)) {
-            setUtilities(data);
-          } else if (data && typeof data === 'object' && Array.isArray((data as any).posts)) {
-            setUtilities((data as any).posts);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      if (user) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            setUserProfile(userDoc.data());
           } else {
-            setUtilities([]);
+            // Create profile if it doesn't exist
+            const newProfile = {
+              username: user.displayName || user.email?.split('@')[0] || 'User',
+              role: user.email === 'noleirodrigues@gmail.com' ? 'admin' : 'player'
+            };
+            await setDoc(doc(db, 'users', user.uid), newProfile);
+            setUserProfile(newProfile);
           }
-          setUtilitiesLoaded(true);
+        } catch (error) {
+          console.error("Error fetching user profile:", error);
         }
-      } catch (error) {
-        console.error("Failed to fetch utilities:", error);
+      } else {
+        setUserProfile(null);
       }
-    };
-
-    const fetchEvents = async () => {
-      try {
-        const response = await fetch('/api/events');
-        if (response.ok) {
-          const data = await response.json();
-          if (Array.isArray(data)) {
-            setCustomEvents(data);
-          } else if (data && typeof data === 'object' && Array.isArray((data as any).customEvents)) {
-            setCustomEvents((data as any).customEvents);
-          } else {
-            setCustomEvents([]);
-          }
-          setEventsLoaded(true);
-        }
-      } catch (error) {
-        console.error("Failed to fetch events:", error);
-      }
-    };
-
-    const fetchCategories = async () => {
-      try {
-        const response = await fetch('/api/categories');
-        if (response.ok) {
-          const data = await response.json();
-          setUtilityCategories(data.utilityCategories || ['Geral', 'Guias', 'Dicas', 'Anúncios', 'Outros']);
-          setPlayerAllowedCategory(data.playerAllowedCategory || '');
-          setCategoriesLoaded(true);
-        }
-      } catch (error) {
-        console.error("Failed to fetch categories:", error);
-      }
-    };
-
-    fetchData();
-    fetchUsers();
-    fetchUtilities();
-    fetchEvents();
-    fetchCategories();
+      setIsAuthReady(true);
+    });
+    return () => unsubscribe();
   }, []);
 
-  // Save data to server whenever it changes
+  // Real-time Listeners
   useEffect(() => {
-    if (!dataLoaded) return;
+    if (!isAuthReady || !currentUser) return;
+
+    const unsubRoster = onSnapshot(collection(db, 'roster'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RosterMember));
+      setRoster(data);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'roster'));
+
+    const unsubWoe = onSnapshot(doc(db, 'settings', 'woe'), (snapshot) => {
+      if (snapshot.exists()) {
+        setWoeSchedule(snapshot.data() as WoESchedule);
+      }
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'settings/woe'));
+
+    const unsubEvents = onSnapshot(collection(db, 'events'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ROEvent));
+      setCustomEvents(data);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'events'));
+
+    const unsubUtilities = onSnapshot(collection(db, 'utilities'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UtilityPost));
+      setUtilities(data);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'utilities'));
+
+    const unsubBuilds = onSnapshot(collection(db, 'builds'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ClassBuild));
+      setBuilds(data);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'builds'));
+
+    let unsubUsers = () => {};
+    if (userProfile?.role === 'admin') {
+      unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+        setUsers(data);
+      }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
+    }
+
+    return () => {
+      unsubRoster();
+      unsubWoe();
+      unsubEvents();
+      unsubUtilities();
+      unsubBuilds();
+      unsubUsers();
+    };
+  }, [isAuthReady, currentUser, userProfile]);
+
+  // Derived Login State
+  const isLoggedIn = !!currentUser;
+  const isAdmin = userProfile?.role === 'admin';
+  const [loginUserInput, setLoginUserInput] = useState('');
+  const [loginPass, setLoginPass] = useState('');
+  const [loginError, setLoginError] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [showRegister, setShowRegister] = useState(false);
+
+  const [userForm, setUserForm] = useState({ username: '', password: '', role: 'player' as 'admin' | 'player' });
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginUserInput || !loginPass) return;
     
-    const saveData = async () => {
-      try {
-        await fetch('/api/data', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ roster, woeSchedule, classTypes })
-        });
-      } catch (error) {
-        console.error("Failed to save shared data:", error);
-      }
-    };
-    
-    const timer = setTimeout(saveData, 500); // Debounce saves
-    return () => clearTimeout(timer);
-  }, [roster, woeSchedule, classTypes, dataLoaded]);
+    setIsLoggingIn(true);
+    try {
+      // For seamless transition, we use username@guild.com as email
+      const email = loginUserInput.includes('@') ? loginUserInput : `${loginUserInput}@guild.com`;
+      const userCredential = await createUserWithEmailAndPassword(auth, email, loginPass);
+      const user = userCredential.user;
+      
+      const newProfile = {
+        username: loginUserInput,
+        role: 'player'
+      };
+      await setDoc(doc(db, 'users', user.uid), newProfile);
+      setUserProfile(newProfile);
+    } catch (error: any) {
+      console.error("Register error:", error);
+      setLoginError(true);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
 
-  // Save users to server
-  useEffect(() => {
-    if (!usersLoaded) return;
-    const saveUsers = async () => {
-      try {
-        await fetch('/api/users', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(users)
-        });
-      } catch (error) {
-        console.error("Failed to save users:", error);
-      }
-    };
-    const timer = setTimeout(saveUsers, 500);
-    return () => clearTimeout(timer);
-  }, [users, usersLoaded]);
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    setLoginError(false);
 
-  // Save utilities to server
-  useEffect(() => {
-    if (!utilitiesLoaded) return;
-    const saveUtilities = async () => {
-      try {
-        await fetch('/api/utilities', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(utilities)
-        });
-      } catch (error) {
-        console.error("Failed to save utilities:", error);
-      }
-    };
-    const timer = setTimeout(saveUtilities, 500);
-    return () => clearTimeout(timer);
-  }, [utilities, utilitiesLoaded]);
+    try {
+      const email = loginUserInput.includes('@') ? loginUserInput : `${loginUserInput}@guild.com`;
+      await signInWithEmailAndPassword(auth, email, loginPass);
+    } catch (error) {
+      console.error("Login error:", error);
+      setLoginError(true);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
 
-  // Save events to server
-  useEffect(() => {
-    if (!eventsLoaded) return;
-    const saveEvents = async () => {
-      try {
-        await fetch('/api/events', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(customEvents)
-        });
-      } catch (error) {
-        console.error("Failed to save events:", error);
-      }
-    };
-    const timer = setTimeout(saveEvents, 500);
-    return () => clearTimeout(timer);
-  }, [customEvents, eventsLoaded]);
-
-  // Save categories to server
-  useEffect(() => {
-    if (!categoriesLoaded) return;
-    const saveCategories = async () => {
-      try {
-        await fetch('/api/categories', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ utilityCategories, playerAllowedCategory })
-        });
-      } catch (error) {
-        console.error("Failed to save categories:", error);
-      }
-    };
-    const timer = setTimeout(saveCategories, 500);
-    return () => clearTimeout(timer);
-  }, [utilityCategories, playerAllowedCategory, categoriesLoaded]);
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+  };
 
   // Admin Form for Roster
   const [isRosterAdminOpen, setIsRosterAdminOpen] = useState(false);
@@ -450,7 +472,6 @@ export default function App() {
   const [builds, setBuilds] = useState<ClassBuild[]>([]);
   const [selectedBuildId, setSelectedBuildId] = useState<string | null>(null);
   const [isBuildAdminOpen, setIsBuildAdminOpen] = useState(false);
-  const [buildsLoaded, setBuildsLoaded] = useState(false);
 
   // Build Form State
   const [buildForm, setBuildForm] = useState<Partial<ClassBuild>>({
@@ -473,155 +494,32 @@ export default function App() {
     }
   });
 
-  // Fetch builds from server
-  useEffect(() => {
-    const fetchBuilds = async () => {
-      try {
-        const response = await fetch('/api/builds');
-        if (response.ok) {
-          const data = await response.json();
-          setBuilds(data.builds || []);
-          setBuildsLoaded(true);
-          if (data.builds?.length > 0) {
-            setSelectedBuildId(data.builds[0].id);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to fetch builds:", error);
-      }
-    };
-    fetchBuilds();
-  }, []);
-
-  // Save builds to server
-  useEffect(() => {
-    if (!buildsLoaded) return;
-    const saveBuilds = async () => {
-      try {
-        await fetch('/api/builds', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ builds })
-        });
-      } catch (error) {
-        console.error("Failed to save builds:", error);
-      }
-    };
-    const timer = setTimeout(saveBuilds, 500);
-    return () => clearTimeout(timer);
-  }, [builds, buildsLoaded]);
-
-  const handleAddBuild = (e: React.FormEvent) => {
+  const handleAddBuild = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newBuild: ClassBuild = {
-      ...buildForm as ClassBuild,
-      id: Date.now().toString(),
-      image: buildForm.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${buildForm.className}${buildForm.version}`
-    };
-    setBuilds(prev => [...prev, newBuild]);
-    setSelectedBuildId(newBuild.id);
-    setIsBuildAdminOpen(false);
+    try {
+      const newBuild: Partial<ClassBuild> = {
+        ...buildForm,
+        image: buildForm.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${buildForm.className}${buildForm.version}`
+      };
+      await addDoc(collection(db, 'builds'), newBuild);
+      setIsBuildAdminOpen(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'builds');
+    }
   };
 
-  const handleDeleteBuild = (id: string) => {
-    setBuilds(prev => prev.filter(b => b.id !== id));
-    if (selectedBuildId === id) {
-      setSelectedBuildId(builds.find(b => b.id !== id)?.id || null);
+  const handleDeleteBuild = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'builds', id));
+      if (selectedBuildId === id) {
+        setSelectedBuildId(builds.find(b => b.id !== id)?.id || null);
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `builds/${id}`);
     }
   };
 
   const selectedBuild = useMemo(() => builds.find(b => b.id === selectedBuildId), [builds, selectedBuildId]);
-
-  // Login State
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    return localStorage.getItem('leprechaun_logged_in') === 'true';
-  });
-  const [isAdmin, setIsAdmin] = useState(() => {
-    return localStorage.getItem('leprechaun_is_admin') === 'true';
-  });
-  const [loginUser, setLoginUser] = useState(() => {
-    return localStorage.getItem('leprechaun_username') || '';
-  });
-  const [loginPass, setLoginPass] = useState('');
-  const [loginError, setLoginError] = useState(false);
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [showRegister, setShowRegister] = useState(false);
-
-  const [userForm, setUserForm] = useState({ username: '', password: '', role: 'player' as 'admin' | 'player' });
-
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!loginUser || !loginPass) return;
-    
-    setIsLoggingIn(true);
-    try {
-      const newUser: User = {
-        id: Date.now().toString(),
-        username: loginUser,
-        password: loginPass,
-        role: 'player'
-      };
-
-      const updatedUsers = [...users, newUser];
-      const response = await fetch('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedUsers)
-      });
-
-      if (response.ok) {
-        setUsers(updatedUsers);
-        // Auto login after register
-        handleLogin(e);
-      }
-    } catch (error) {
-      console.error("Register error:", error);
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoggingIn(true);
-    setLoginError(false);
-
-    try {
-      const response = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: loginUser, password: loginPass })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const user = data.user;
-        setIsLoggedIn(true);
-        setIsAdmin(user.role === 'admin');
-        localStorage.setItem('leprechaun_logged_in', 'true');
-        localStorage.setItem('leprechaun_is_admin', user.role === 'admin' ? 'true' : 'false');
-        localStorage.setItem('leprechaun_username', user.username);
-        setLoginError(false);
-      } else {
-        setLoginError(true);
-      }
-    } catch (error) {
-      console.error("Login error:", error);
-      setLoginError(true);
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
-  const handleLogout = () => {
-    setIsLoggedIn(false);
-    setIsAdmin(false);
-    setLoginUser('');
-    localStorage.removeItem('leprechaun_logged_in');
-    localStorage.removeItem('leprechaun_is_admin');
-    localStorage.removeItem('leprechaun_username');
-  };
 
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
@@ -697,76 +595,101 @@ export default function App() {
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [utilities, utilitySearch, utilityCategory]);
 
-  const addUtilityPost = (e: React.FormEvent) => {
+  const addUtilityPost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!utilityForm.title || !utilityForm.content) return;
     
-    if (editingUtilityId) {
-      setUtilities(prev => prev.map(p => p.id === editingUtilityId ? {
-        ...p,
-        title: utilityForm.title,
-        content: utilityForm.content,
-        category: utilityForm.category
-      } : p));
-      setEditingUtilityId(null);
-    } else {
-      const newPost: UtilityPost = {
-        id: Date.now().toString(),
-        title: utilityForm.title,
-        content: utilityForm.content,
-        category: utilityForm.category,
-        author: loginUser || 'Admin',
-        createdAt: new Date().toISOString()
-      };
-      setUtilities(prev => [newPost, ...prev]);
+    try {
+      if (editingUtilityId) {
+        await updateDoc(doc(db, 'utilities', editingUtilityId), {
+          title: utilityForm.title,
+          content: utilityForm.content,
+          category: utilityForm.category
+        });
+        setEditingUtilityId(null);
+      } else {
+        const newPost = {
+          title: utilityForm.title,
+          content: utilityForm.content,
+          category: utilityForm.category,
+          author: userProfile?.username || 'Admin',
+          createdAt: new Date().toISOString()
+        };
+        await addDoc(collection(db, 'utilities'), newPost);
+      }
+      
+      setUtilityForm({ title: '', content: '', category: isAdmin ? utilityCategories[0] : playerAllowedCategory });
+      setIsUtilityAdminOpen(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'utilities');
     }
-    
-    setUtilityForm({ title: '', content: '', category: isAdmin ? utilityCategories[0] : playerAllowedCategory });
-    setIsUtilityAdminOpen(false);
   };
 
-  const deleteUtilityPost = (id: string) => {
-    setUtilities(prev => prev.filter(p => p.id !== id));
+  const deleteUtilityPost = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'utilities', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `utilities/${id}`);
+    }
   };
 
   // Roster CRUD
-  const addRosterMember = (e: React.FormEvent) => {
+  const addRosterMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rosterFormClass) return;
-    const newMember: RosterMember = {
-      id: Date.now().toString(),
-      name: rosterFormName.trim() || '',
-      className: rosterFormClass,
-      version: rosterFormVersion.trim() || 'Default',
-      confirmed: null
-    };
-    setRoster(prev => [...prev, newMember]);
-    setRosterFormName('');
-    setRosterFormClass('');
-    setRosterFormVersion('');
+    try {
+      const newMember = {
+        name: rosterFormName.trim() || '',
+        className: rosterFormClass,
+        version: rosterFormVersion.trim() || 'Default',
+        confirmed: null
+      };
+      await addDoc(collection(db, 'roster'), newMember);
+      setRosterFormName('');
+      setRosterFormClass('');
+      setRosterFormVersion('');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'roster');
+    }
   };
 
-  const deleteRosterMember = (id: string) => {
-    setRoster(prev => prev.filter(m => m.id !== id));
+  const deleteRosterMember = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'roster', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `roster/${id}`);
+    }
   };
 
-  const updateRosterMemberName = (id: string, newName: string) => {
-    setRoster(prev => prev.map(m => m.id === id ? { ...m, name: newName } : m));
-    setEditingMemberId(null);
+  const updateRosterMemberName = async (id: string, newName: string) => {
+    try {
+      await updateDoc(doc(db, 'roster', id), { name: newName });
+      setEditingMemberId(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `roster/${id}`);
+    }
   };
 
-  const updateRosterMemberClass = (id: string, newClass: string, newVersion: string) => {
-    setRoster(prev => prev.map(m => m.id === id ? { ...m, className: newClass, version: newVersion } : m));
-    setEditingMemberId(null);
+  const updateRosterMemberClass = async (id: string, newClass: string, newVersion: string) => {
+    try {
+      await updateDoc(doc(db, 'roster', id), { className: newClass, version: newVersion });
+      setEditingMemberId(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `roster/${id}`);
+    }
   };
 
-  const updateConfirmation = (id: string, status: boolean | null) => {
-    setRoster(prev => prev.map(m => {
-      if (m.id === id) {
-        return { ...m, confirmed: m.confirmed === status ? null : status };
+  const updateConfirmation = async (id: string, status: boolean | null) => {
+    try {
+      const member = roster.find(m => m.id === id);
+      if (member) {
+        await updateDoc(doc(db, 'roster', id), { 
+          confirmed: member.confirmed === status ? null : status 
+        });
       }
-      return m;
-    }));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `roster/${id}`);
+    }
   };
 
   // Next War Logic
@@ -954,31 +877,38 @@ export default function App() {
     setActiveAlerts(prev => prev.filter(a => a !== id));
   };
 
-  const handleAddEvent = (e: React.FormEvent) => {
+  const handleAddEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formTime || !formTitle) return;
 
-    const newEvent: ROEvent = {
-      id: `custom-${Date.now()}`,
-      name: formTitle,
-      description: formDesc || 'Evento criado pela Staff.',
-      prizes: formPrize ? formPrize.split(',').map(p => p.trim()) : ['Premiação a definir'],
-      times: [formTime],
-      category: formCategory
-    };
+    try {
+      const newEvent = {
+        name: formTitle,
+        description: formDesc || 'Evento criado pela Staff.',
+        prizes: formPrize ? formPrize.split(',').map(p => p.trim()) : ['Premiação a definir'],
+        times: [formTime],
+        category: formCategory
+      };
 
-    setCustomEvents(prev => [...prev, newEvent]);
-    
-    // Reset form
-    setFormTime('');
-    setFormTitle('');
-    setFormPrize('');
-    setFormDesc('');
-    setIsStaffPanelOpen(false);
+      await addDoc(collection(db, 'events'), newEvent);
+      
+      // Reset form
+      setFormTime('');
+      setFormTitle('');
+      setFormPrize('');
+      setFormDesc('');
+      setIsStaffPanelOpen(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'events');
+    }
   };
 
-  const handleDeleteEvent = (id: string) => {
-    setCustomEvents(prev => prev.filter(e => e.id !== id));
+  const handleDeleteEvent = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'events', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `events/${id}`);
+    }
   };
 
   return (
@@ -1032,8 +962,8 @@ export default function App() {
                   <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1.5 ml-1">Usuário</label>
                   <input 
                     type="text" 
-                    value={loginUser}
-                    onChange={(e) => setLoginUser(e.target.value)}
+                    value={loginUserInput}
+                    onChange={(e) => setLoginUserInput(e.target.value)}
                     className="w-full bg-emerald-900/20 border border-emerald-500/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 transition-colors"
                     placeholder="Seu usuário"
                   />
@@ -1846,7 +1776,7 @@ export default function App() {
                               <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2">Autor</label>
                               <input 
                                 type="text" 
-                                value={loginUser}
+                                value={userProfile?.username || ''}
                                 disabled
                                 className="w-full bg-zinc-950/50 border border-white/5 rounded-xl px-4 py-3 text-zinc-500 cursor-not-allowed"
                               />
@@ -1893,7 +1823,7 @@ export default function App() {
                               <Clock size={12} /> {new Date(post.createdAt).toLocaleDateString()}
                             </span>
                             <div className="flex items-center gap-1">
-                              {(isAdmin || post.author === loginUser) && (
+                              {(isAdmin || post.author === (userProfile?.username || '')) && (
                                 <>
                                   <button 
                                     onClick={() => {
@@ -2122,7 +2052,14 @@ export default function App() {
                                     type="text" 
                                     placeholder="Dias (ex: Ter, Qui, Sáb)"
                                     value={woeSchedule.days.join(', ')}
-                                    onChange={(e) => setWoeSchedule(prev => ({ ...prev, days: e.target.value.split(',').map(d => d.trim()) }))}
+                                    onChange={async (e) => {
+                                      const newDays = e.target.value.split(',').map(d => d.trim());
+                                      try {
+                                        await setDoc(doc(db, 'settings', 'woe'), { ...woeSchedule, days: newDays });
+                                      } catch (err) {
+                                        handleFirestoreError(err, OperationType.WRITE, 'settings/woe');
+                                      }
+                                    }}
                                     className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
                                   />
                                   <div className="grid grid-cols-2 gap-3">
@@ -2131,7 +2068,13 @@ export default function App() {
                                       <input 
                                         type="time" 
                                         value={woeSchedule.startTime}
-                                        onChange={(e) => setWoeSchedule(prev => ({ ...prev, startTime: e.target.value }))}
+                                        onChange={async (e) => {
+                                          try {
+                                            await setDoc(doc(db, 'settings', 'woe'), { ...woeSchedule, startTime: e.target.value });
+                                          } catch (err) {
+                                            handleFirestoreError(err, OperationType.WRITE, 'settings/woe');
+                                          }
+                                        }}
                                         className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
                                       />
                                     </div>
@@ -2140,7 +2083,13 @@ export default function App() {
                                       <input 
                                         type="time" 
                                         value={woeSchedule.endTime}
-                                        onChange={(e) => setWoeSchedule(prev => ({ ...prev, endTime: e.target.value }))}
+                                        onChange={async (e) => {
+                                          try {
+                                            await setDoc(doc(db, 'settings', 'woe'), { ...woeSchedule, endTime: e.target.value });
+                                          } catch (err) {
+                                            handleFirestoreError(err, OperationType.WRITE, 'settings/woe');
+                                          }
+                                        }}
                                         className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
                                       />
                                     </div>
@@ -2150,69 +2099,40 @@ export default function App() {
                             </>
                           ) : (
                             <div className="space-y-4">
-                              {/* User Form */}
-                              <div className="bg-emerald-900/40 border border-yellow-500/30 rounded-2xl p-4 space-y-3">
-                                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Adicionar Usuário</p>
-                                <form 
-                                  onSubmit={(e) => {
-                                    e.preventDefault();
-                                    if (userForm.username && userForm.password) {
-                                      const newUser: User = {
-                                        id: Date.now().toString(),
-                                        username: userForm.username,
-                                        password: userForm.password,
-                                        role: userForm.role
-                                      };
-                                      setUsers([...users, newUser]);
-                                      setUserForm({ username: '', password: '', role: 'player' });
-                                    }
-                                  }} 
-                                  className="space-y-3"
-                                >
-                                  <div className="grid grid-cols-1 gap-3">
-                                    <input 
-                                      type="text" 
-                                      placeholder="Usuário"
-                                      value={userForm.username}
-                                      onChange={(e) => setUserForm({...userForm, username: e.target.value})}
-                                      className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
-                                    />
-                                    <input 
-                                      type="password" 
-                                      placeholder="Senha"
-                                      value={userForm.password}
-                                      onChange={(e) => setUserForm({...userForm, password: e.target.value})}
-                                      className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
-                                    />
-                                    <select 
-                                      value={userForm.role}
-                                      onChange={(e) => setUserForm({...userForm, role: e.target.value as 'admin' | 'player'})}
-                                      className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
-                                    >
-                                      <option value="player">Jogador</option>
-                                      <option value="admin">Admin</option>
-                                    </select>
-                                  </div>
-                                  <button 
-                                    type="submit"
-                                    className="w-full py-2 bg-emerald-500 text-white text-xs font-black rounded-lg hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2"
-                                  >
-                                    <Plus size={14} /> CRIAR USUÁRIO
-                                  </button>
-                                </form>
-                              </div>
-
                               {/* Users List */}
-                              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                              <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
                                 {users.map(u => (
                                   <div key={u.id} className="flex items-center justify-between p-3 bg-emerald-900/20 border border-emerald-500/10 rounded-xl">
                                     <div>
                                       <p className="text-xs font-black text-white">{u.username}</p>
-                                      <p className="text-[8px] font-black text-emerald-500 uppercase tracking-widest">{u.role}</p>
+                                      <div className="flex items-center gap-2 mt-1">
+                                        <select 
+                                          value={u.role}
+                                          onChange={async (e) => {
+                                            try {
+                                              await updateDoc(doc(db, 'users', u.id), { role: e.target.value });
+                                            } catch (err) {
+                                              handleFirestoreError(err, OperationType.UPDATE, `users/${u.id}`);
+                                            }
+                                          }}
+                                          className="bg-emerald-950/50 border border-emerald-500/20 rounded px-2 py-0.5 text-[8px] font-black text-emerald-500 uppercase tracking-widest focus:outline-none focus:border-yellow-500"
+                                        >
+                                          <option value="player">Jogador</option>
+                                          <option value="admin">Admin</option>
+                                        </select>
+                                      </div>
                                     </div>
-                                    {u.username !== 'admin' && (
+                                    {u.username !== 'admin' && u.id !== currentUser?.uid && (
                                       <button 
-                                        onClick={() => setUsers(users.filter(user => user.id !== u.id))}
+                                        onClick={async () => {
+                                          if (confirm(`Deseja realmente excluir o perfil de ${u.username}?`)) {
+                                            try {
+                                              await deleteDoc(doc(db, 'users', u.id));
+                                            } catch (err) {
+                                              handleFirestoreError(err, OperationType.DELETE, `users/${u.id}`);
+                                            }
+                                          }
+                                        }}
                                         className="p-1.5 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
                                       >
                                         <Trash2 size={14} />
