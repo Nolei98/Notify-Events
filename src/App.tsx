@@ -220,10 +220,8 @@ export default function App() {
   
   // Staff Panel State
   const [isStaffPanelOpen, setIsStaffPanelOpen] = useState(false);
-  const [customEvents, setCustomEvents] = useState<ROEvent[]>(() => {
-    const saved = localStorage.getItem('omega_custom_events');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [customEvents, setCustomEvents] = useState<ROEvent[]>([]);
+  const [eventsLoaded, setEventsLoaded] = useState(false);
   
   // Form State
   const [formTime, setFormTime] = useState('');
@@ -239,6 +237,21 @@ export default function App() {
   const [woeSchedule, setWoeSchedule] = useState<WoESchedule>({ days: ['Terça', 'Quinta', 'Sábado'], startTime: '20:00', endTime: '21:00' });
   const [classTypes, setClassTypes] = useState<string[]>(['Paladin', 'Professor', 'Clown', 'High Wizard', 'Creator', 'Sniper', 'Stalker', 'Champion']);
   const [dataLoaded, setDataLoaded] = useState(false);
+
+  // Users State
+  const [users, setUsers] = useState<User[]>([
+    { id: '1', username: 'administrador', password: 'admin123', role: 'admin' },
+    { id: '2', username: 'jogador', password: '1234', role: 'player' }
+  ]);
+  const [usersLoaded, setUsersLoaded] = useState(false);
+
+  // Utilities State
+  const [utilities, setUtilities] = useState<UtilityPost[]>([]);
+  const [utilitiesLoaded, setUtilitiesLoaded] = useState(false);
+
+  const [utilityCategories, setUtilityCategories] = useState<string[]>(['Geral', 'Guias', 'Dicas', 'Anúncios', 'Outros']);
+  const [playerAllowedCategory, setPlayerAllowedCategory] = useState<string>('');
+  const [categoriesLoaded, setCategoriesLoaded] = useState(false);
 
   // Fetch initial data from server
   useEffect(() => {
@@ -258,7 +271,79 @@ export default function App() {
         console.error("Failed to fetch shared data:", error);
       }
     };
+
+    const fetchUsers = async () => {
+      try {
+        const response = await fetch('/api/users');
+        if (response.ok) {
+          const data = await response.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setUsers(data);
+          }
+          setUsersLoaded(true);
+        }
+      } catch (error) {
+        console.error("Failed to fetch users:", error);
+      }
+    };
+
+    const fetchUtilities = async () => {
+      try {
+        const response = await fetch('/api/utilities');
+        if (response.ok) {
+          const data = await response.json();
+          if (Array.isArray(data)) {
+            setUtilities(data);
+          } else if (data && typeof data === 'object' && Array.isArray((data as any).posts)) {
+            setUtilities((data as any).posts);
+          } else {
+            setUtilities([]);
+          }
+          setUtilitiesLoaded(true);
+        }
+      } catch (error) {
+        console.error("Failed to fetch utilities:", error);
+      }
+    };
+
+    const fetchEvents = async () => {
+      try {
+        const response = await fetch('/api/events');
+        if (response.ok) {
+          const data = await response.json();
+          if (Array.isArray(data)) {
+            setCustomEvents(data);
+          } else if (data && typeof data === 'object' && Array.isArray((data as any).customEvents)) {
+            setCustomEvents((data as any).customEvents);
+          } else {
+            setCustomEvents([]);
+          }
+          setEventsLoaded(true);
+        }
+      } catch (error) {
+        console.error("Failed to fetch events:", error);
+      }
+    };
+
+    const fetchCategories = async () => {
+      try {
+        const response = await fetch('/api/categories');
+        if (response.ok) {
+          const data = await response.json();
+          setUtilityCategories(data.utilityCategories || ['Geral', 'Guias', 'Dicas', 'Anúncios', 'Outros']);
+          setPlayerAllowedCategory(data.playerAllowedCategory || '');
+          setCategoriesLoaded(true);
+        }
+      } catch (error) {
+        console.error("Failed to fetch categories:", error);
+      }
+    };
+
     fetchData();
+    fetchUsers();
+    fetchUtilities();
+    fetchEvents();
+    fetchCategories();
   }, []);
 
   // Save data to server whenever it changes
@@ -280,6 +365,78 @@ export default function App() {
     const timer = setTimeout(saveData, 500); // Debounce saves
     return () => clearTimeout(timer);
   }, [roster, woeSchedule, classTypes, dataLoaded]);
+
+  // Save users to server
+  useEffect(() => {
+    if (!usersLoaded) return;
+    const saveUsers = async () => {
+      try {
+        await fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(users)
+        });
+      } catch (error) {
+        console.error("Failed to save users:", error);
+      }
+    };
+    const timer = setTimeout(saveUsers, 500);
+    return () => clearTimeout(timer);
+  }, [users, usersLoaded]);
+
+  // Save utilities to server
+  useEffect(() => {
+    if (!utilitiesLoaded) return;
+    const saveUtilities = async () => {
+      try {
+        await fetch('/api/utilities', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(utilities)
+        });
+      } catch (error) {
+        console.error("Failed to save utilities:", error);
+      }
+    };
+    const timer = setTimeout(saveUtilities, 500);
+    return () => clearTimeout(timer);
+  }, [utilities, utilitiesLoaded]);
+
+  // Save events to server
+  useEffect(() => {
+    if (!eventsLoaded) return;
+    const saveEvents = async () => {
+      try {
+        await fetch('/api/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(customEvents)
+        });
+      } catch (error) {
+        console.error("Failed to save events:", error);
+      }
+    };
+    const timer = setTimeout(saveEvents, 500);
+    return () => clearTimeout(timer);
+  }, [customEvents, eventsLoaded]);
+
+  // Save categories to server
+  useEffect(() => {
+    if (!categoriesLoaded) return;
+    const saveCategories = async () => {
+      try {
+        await fetch('/api/categories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ utilityCategories, playerAllowedCategory })
+        });
+      } catch (error) {
+        console.error("Failed to save categories:", error);
+      }
+    };
+    const timer = setTimeout(saveCategories, 500);
+    return () => clearTimeout(timer);
+  }, [utilityCategories, playerAllowedCategory, categoriesLoaded]);
 
   // Admin Form for Roster
   const [isRosterAdminOpen, setIsRosterAdminOpen] = useState(false);
@@ -381,44 +538,88 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(() => {
     return localStorage.getItem('leprechaun_is_admin') === 'true';
   });
-  const [loginUser, setLoginUser] = useState('');
+  const [loginUser, setLoginUser] = useState(() => {
+    return localStorage.getItem('leprechaun_username') || '';
+  });
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState(false);
-
-  const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('leprechaun_users');
-    if (saved) return JSON.parse(saved);
-    return [
-      { id: '1', username: 'admin', password: 'admin123', role: 'admin' },
-      { id: '2', username: 'player', password: '1234', role: 'player' }
-    ];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('leprechaun_users', JSON.stringify(users));
-  }, [users]);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [showRegister, setShowRegister] = useState(false);
 
   const [userForm, setUserForm] = useState({ username: '', password: '', role: 'player' as 'admin' | 'player' });
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    const user = users.find(u => u.username === loginUser && u.password === loginPass);
-    if (user) {
-      setIsLoggedIn(true);
-      setIsAdmin(user.role === 'admin');
-      localStorage.setItem('leprechaun_logged_in', 'true');
-      localStorage.setItem('leprechaun_is_admin', user.role === 'admin' ? 'true' : 'false');
-      setLoginError(false);
-    } else {
+    if (!loginUser || !loginPass) return;
+    
+    setIsLoggingIn(true);
+    try {
+      const newUser: User = {
+        id: Date.now().toString(),
+        username: loginUser,
+        password: loginPass,
+        role: 'player'
+      };
+
+      const updatedUsers = [...users, newUser];
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedUsers)
+      });
+
+      if (response.ok) {
+        setUsers(updatedUsers);
+        // Auto login after register
+        handleLogin(e);
+      }
+    } catch (error) {
+      console.error("Register error:", error);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    setLoginError(false);
+
+    try {
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: loginUser, password: loginPass })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const user = data.user;
+        setIsLoggedIn(true);
+        setIsAdmin(user.role === 'admin');
+        localStorage.setItem('leprechaun_logged_in', 'true');
+        localStorage.setItem('leprechaun_is_admin', user.role === 'admin' ? 'true' : 'false');
+        localStorage.setItem('leprechaun_username', user.username);
+        setLoginError(false);
+      } else {
+        setLoginError(true);
+      }
+    } catch (error) {
+      console.error("Login error:", error);
       setLoginError(true);
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
   const handleLogout = () => {
     setIsLoggedIn(false);
     setIsAdmin(false);
+    setLoginUser('');
     localStorage.removeItem('leprechaun_logged_in');
     localStorage.removeItem('leprechaun_is_admin');
+    localStorage.removeItem('leprechaun_username');
   };
 
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
@@ -426,17 +627,6 @@ export default function App() {
   const [editingClass, setEditingClass] = useState('');
   const [editingVersion, setEditingVersion] = useState('');
   const [adminTab, setAdminTab] = useState<'roster' | 'users'>('roster');
-
-  // Utilities State
-  const [utilities, setUtilities] = useState<UtilityPost[]>(() => {
-    const saved = localStorage.getItem('leprechaun_utilities');
-    if (saved) return JSON.parse(saved);
-    return [];
-  });
-
-  useEffect(() => {
-    localStorage.setItem('leprechaun_utilities', JSON.stringify(utilities));
-  }, [utilities]);
 
   const [isUtilitiesOpen, setIsUtilitiesOpen] = useState(false);
   const [utilitySearch, setUtilitySearch] = useState('');
@@ -447,24 +637,6 @@ export default function App() {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [utilityForm, setUtilityForm] = useState({ title: '', content: '', category: '' });
   const [newCategoryName, setNewCategoryName] = useState('');
-
-  const [utilityCategories, setUtilityCategories] = useState<string[]>(() => {
-    const saved = localStorage.getItem('leprechaun_utility_categories');
-    if (saved) return JSON.parse(saved);
-    return ['Geral', 'Guias', 'Dicas', 'Anúncios', 'Outros'];
-  });
-
-  const [playerAllowedCategory, setPlayerAllowedCategory] = useState<string>(() => {
-    return localStorage.getItem('leprechaun_player_allowed_category') || '';
-  });
-
-  useEffect(() => {
-    localStorage.setItem('leprechaun_utility_categories', JSON.stringify(utilityCategories));
-  }, [utilityCategories]);
-
-  useEffect(() => {
-    localStorage.setItem('leprechaun_player_allowed_category', playerAllowedCategory);
-  }, [playerAllowedCategory]);
 
   useEffect(() => {
     if (!utilityForm.category && utilityCategories.length > 0) {
@@ -654,11 +826,6 @@ export default function App() {
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
-  // Save custom events to localStorage
-  useEffect(() => {
-    localStorage.setItem('omega_custom_events', JSON.stringify(customEvents));
-  }, [customEvents]);
 
   // Save notification settings to localStorage
   useEffect(() => {
@@ -859,7 +1026,7 @@ export default function App() {
                 A sorte é só um detalhe, não o todo.
               </p>
 
-              <form onSubmit={handleLogin} className="space-y-4">
+              <form onSubmit={showRegister ? handleRegister : handleLogin} className="space-y-4">
                 <div className="text-left">
                   <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1.5 ml-1">Usuário</label>
                   <input 
@@ -881,7 +1048,7 @@ export default function App() {
                   />
                 </div>
 
-                {loginError && (
+                {loginError && !showRegister && (
                   <motion.p 
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -893,11 +1060,29 @@ export default function App() {
 
                 <button 
                   type="submit"
-                  className="w-full py-4 bg-gradient-to-r from-emerald-500 to-yellow-500 text-white font-black rounded-xl shadow-lg shadow-emerald-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-4"
+                  disabled={isLoggingIn}
+                  className={`w-full py-4 bg-gradient-to-r from-emerald-500 to-yellow-500 text-white font-black rounded-xl shadow-lg shadow-emerald-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-4 ${isLoggingIn ? 'opacity-70 cursor-wait' : ''}`}
                 >
-                  <Zap size={20} />
-                  ENTRAR NA VILA
+                  {isLoggingIn ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <Zap size={20} />
+                  )}
+                  {isLoggingIn ? 'PROCESSANDO...' : (showRegister ? 'CRIAR CONTA' : 'ENTRAR NA VILA')}
                 </button>
+
+                <div className="pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRegister(!showRegister);
+                      setLoginError(false);
+                    }}
+                    className="text-emerald-400 text-[10px] font-black uppercase tracking-widest hover:text-yellow-400 transition-colors"
+                  >
+                    {showRegister ? 'Já tenho uma conta' : 'Não tenho conta? Criar agora'}
+                  </button>
+                </div>
               </form>
             </motion.div>
           </motion.div>
