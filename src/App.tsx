@@ -1,3 +1,4 @@
+// App principal do Roster da Guilda - v1.0.1
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
