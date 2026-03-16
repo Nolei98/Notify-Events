@@ -358,6 +358,13 @@ export default function App() {
   useEffect(() => {
     if (!isAuthReady || !currentUser) return;
 
+    // Real-time listener for current user profile to reflect approval status instantly
+    const unsubProfile = onSnapshot(doc(db, 'users', currentUser.uid), (snapshot) => {
+      if (snapshot.exists()) {
+        setUserProfile(snapshot.data());
+      }
+    }, (err) => handleFirestoreError(err, OperationType.GET, `users/${currentUser.uid}`));
+
     const unsubRoster = onSnapshot(collection(db, 'roster'), (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RosterMember));
       setRoster(data);
@@ -393,6 +400,7 @@ export default function App() {
     }
 
     return () => {
+      unsubProfile();
       unsubRoster();
       unsubWoe();
       unsubEvents();
@@ -406,6 +414,7 @@ export default function App() {
   const isLoggedIn = !!currentUser;
   const isAdmin = userProfile?.role === 'admin';
   const [loginUserInput, setLoginUserInput] = useState('');
+  const [loginEmail, setLoginEmail] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -416,13 +425,11 @@ export default function App() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginUserInput || !loginPass) return;
+    if (!loginUserInput || !loginPass || !loginEmail) return;
     
     setIsLoggingIn(true);
     try {
-      // For seamless transition, we use username@guild.com as email
-      const email = loginUserInput.includes('@') ? loginUserInput : `${loginUserInput}@guild.com`;
-      const userCredential = await createUserWithEmailAndPassword(auth, email, loginPass);
+      const userCredential = await createUserWithEmailAndPassword(auth, loginEmail, loginPass);
       const user = userCredential.user;
       
       const newProfile = {
@@ -446,6 +453,7 @@ export default function App() {
     setLoginError(false);
 
     try {
+      // Allow login with email or username (if username, append @guild.com for legacy or if they didn't provide email)
       const email = loginUserInput.includes('@') ? loginUserInput : `${loginUserInput}@guild.com`;
       await signInWithEmailAndPassword(auth, email, loginPass);
     } catch (error) {
@@ -961,14 +969,29 @@ export default function App() {
               </p>
 
               <form onSubmit={showRegister ? handleRegister : handleLogin} className="space-y-4">
+                {showRegister && (
+                  <div className="text-left">
+                    <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1.5 ml-1">E-mail</label>
+                    <input 
+                      type="email" 
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      className="w-full bg-emerald-900/20 border border-emerald-500/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 transition-colors"
+                      placeholder="seu@email.com"
+                      required={showRegister}
+                    />
+                  </div>
+                )}
                 <div className="text-left">
-                  <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1.5 ml-1">Usuário</label>
+                  <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1.5 ml-1">
+                    {showRegister ? 'Nome de Usuário (Ex: Personagem)' : 'Usuário ou E-mail'}
+                  </label>
                   <input 
                     type="text" 
                     value={loginUserInput}
                     onChange={(e) => setLoginUserInput(e.target.value)}
                     className="w-full bg-emerald-900/20 border border-emerald-500/20 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 transition-colors"
-                    placeholder="Seu usuário"
+                    placeholder={showRegister ? "Como quer ser chamado" : "Seu usuário ou e-mail"}
                   />
                 </div>
                 <div className="text-left">
@@ -989,6 +1012,16 @@ export default function App() {
                     className="text-red-400 text-xs font-bold"
                   >
                     Usuário ou senha incorretos. Tente novamente!
+                  </motion.p>
+                )}
+
+                {loginError && showRegister && (
+                  <motion.p 
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="text-red-400 text-xs font-bold"
+                  >
+                    Erro ao criar conta. Verifique os dados ou se o e-mail já está em uso.
                   </motion.p>
                 )}
 
