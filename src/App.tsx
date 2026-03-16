@@ -173,6 +173,7 @@ interface User {
   id: string;
   username: string;
   role: 'admin' | 'player';
+  approved: boolean;
 }
 
 export interface UtilityPost {
@@ -336,7 +337,8 @@ export default function App() {
             // Create profile if it doesn't exist
             const newProfile = {
               username: user.displayName || user.email?.split('@')[0] || 'User',
-              role: user.email === 'noleirodrigues@gmail.com' ? 'admin' : 'player'
+              role: user.email === 'noleirodrigues@gmail.com' ? 'admin' : 'player',
+              approved: user.email === 'noleirodrigues@gmail.com'
             };
             await setDoc(doc(db, 'users', user.uid), newProfile);
             setUserProfile(newProfile);
@@ -425,7 +427,8 @@ export default function App() {
       
       const newProfile = {
         username: loginUserInput,
-        role: 'player'
+        role: 'player',
+        approved: false
       };
       await setDoc(doc(db, 'users', user.uid), newProfile);
       setUserProfile(newProfile);
@@ -1015,6 +1018,47 @@ export default function App() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Approval Pending Overlay */}
+      <AnimatePresence>
+        {isLoggedIn && userProfile && !userProfile.approved && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1001] flex items-center justify-center p-4 bg-emerald-950/90 backdrop-blur-2xl"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              className="w-full max-w-md bg-zinc-900/80 backdrop-blur-2xl border border-yellow-500/30 rounded-3xl p-8 shadow-2xl text-center"
+            >
+              <div className="flex justify-center mb-6">
+                <div className="p-4 bg-yellow-500/20 rounded-full border border-yellow-500/30 animate-pulse">
+                  <Clock size={40} className="text-yellow-500" />
+                </div>
+              </div>
+              <h2 className="text-2xl font-black text-white mb-2 uppercase tracking-tighter">Acesso Restrito</h2>
+              <p className="text-zinc-400 text-sm mb-8 leading-relaxed">
+                Olá, <span className="text-emerald-400 font-bold">{userProfile.username}</span>!<br/>
+                Seu cadastro foi realizado com sucesso, mas sua conta ainda está <span className="text-yellow-500 font-bold">aguardando confirmação</span> de um dos administradores.
+              </p>
+              <div className="space-y-4">
+                <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl">
+                  <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Status do Cadastro</p>
+                  <p className="text-xs text-white font-bold mt-1 italic">Pendente de Aprovação</p>
+                </div>
+                <button
+                  onClick={() => signOut(auth)}
+                  className="w-full py-4 bg-zinc-800 text-zinc-400 text-xs font-black uppercase tracking-widest rounded-2xl hover:bg-zinc-700 hover:text-white transition-all"
+                >
+                  Sair da Conta
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
@@ -2120,6 +2164,18 @@ export default function App() {
                                           <option value="player">Jogador</option>
                                           <option value="admin">Admin</option>
                                         </select>
+                                        <button
+                                          onClick={async () => {
+                                            try {
+                                              await updateDoc(doc(db, 'users', u.id), { approved: !u.approved });
+                                            } catch (err) {
+                                              handleFirestoreError(err, OperationType.UPDATE, `users/${u.id}`);
+                                            }
+                                          }}
+                                          className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest transition-colors ${u.approved ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30' : 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/30'}`}
+                                        >
+                                          {u.approved ? 'Aprovado' : 'Pendente'}
+                                        </button>
                                       </div>
                                     </div>
                                     {u.username !== 'admin' && u.id !== currentUser?.uid && (

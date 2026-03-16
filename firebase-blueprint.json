@@ -61,7 +61,8 @@
       "type": "object",
       "properties": {
         "username": { "type": "string" },
-        "role": { "type": "string", "enum": ["admin", "player"] }
+        "role": { "type": "string", "enum": ["admin", "player"] },
+        "approved": { "type": "boolean" }
       }
     }
   },
