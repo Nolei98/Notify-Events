@@ -63,6 +63,9 @@ enum OperationType {
   WRITE = 'write',
 }
 
+// API Base URL for cross-origin requests (e.g., when hosted on Vercel)
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 const generateId = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
@@ -313,7 +316,7 @@ export default function App() {
 
   const saveWoeSettings = async () => {
     try {
-      await fetch('/api/settings_woe', {
+      await fetch(`${API_BASE}/api/settings_woe`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...woeForm, id: 'main' })
@@ -360,14 +363,14 @@ export default function App() {
       setCurrentUser(user);
       if (user) {
         try {
-          const users = await fetch('/api/users').then(res => res.json());
+          const users = await fetch(`${API_BASE}/api/users`).then(res => res.json());
           const profile = Array.isArray(users) ? users.find((u: any) => u.uid === user.uid) : null;
           
           if (profile) {
             // Force admin role for the master email if it's not already set
             if (user.email === 'noleirodrigues@gmail.com' && (profile.role !== 'admin' || !profile.approved)) {
               const updatedProfile = { ...profile, role: 'admin', approved: true };
-              await fetch('/api/users', {
+              await fetch(`${API_BASE}/api/users`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(updatedProfile)
@@ -386,7 +389,7 @@ export default function App() {
               email: user.email,
               createdAt: new Date().toISOString()
             };
-            await fetch('/api/users', {
+            await fetch(`${API_BASE}/api/users`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(newProfile)
@@ -404,6 +407,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // API Base URL
   // Real-time Listeners (Now Polling Google Sheets API)
   useEffect(() => {
     if (!isAuthReady || !currentUser) return;
@@ -411,11 +415,11 @@ export default function App() {
     const fetchAllData = async () => {
       try {
         const [rosterData, woeData, eventsData, utilitiesData, buildsData] = await Promise.all([
-          fetch('/api/roster').then(res => res.json()),
-          fetch('/api/settings_woe').then(res => res.json()),
-          fetch('/api/events').then(res => res.json()),
-          fetch('/api/utilities').then(res => res.json()),
-          fetch('/api/builds').then(res => res.json())
+          fetch(`${API_BASE}/api/roster`).then(res => res.json()),
+          fetch(`${API_BASE}/api/settings_woe`).then(res => res.json()),
+          fetch(`${API_BASE}/api/events`).then(res => res.json()),
+          fetch(`${API_BASE}/api/utilities`).then(res => res.json()),
+          fetch(`${API_BASE}/api/builds`).then(res => res.json())
         ]);
 
         if (Array.isArray(rosterData)) setRoster(rosterData);
@@ -451,7 +455,7 @@ export default function App() {
 
     const fetchUsers = async () => {
       try {
-        const data = await fetch('/api/users').then(res => res.json());
+        const data = await fetch(`${API_BASE}/api/users`).then(res => res.json());
         if (Array.isArray(data)) setUsers(data);
       } catch (err) {
         console.error("Error fetching users:", err);
@@ -494,7 +498,7 @@ export default function App() {
         createdAt: new Date().toISOString()
       };
 
-      const response = await fetch('/api/users', {
+      const response = await fetch(`${API_BASE}/api/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newProfile)
@@ -549,7 +553,7 @@ export default function App() {
   const testSheetsConnection = async () => {
     setRosterStatus({ type: 'loading', message: 'Testando conexão...' });
     try {
-      const response = await fetch('/api/test-sheets');
+      const response = await fetch(`${API_BASE}/api/test-sheets`);
       const data = await response.json();
       if (data.success) {
         const sheetNames = data.sheets.map((s: any) => s.title).join(', ');
@@ -602,7 +606,7 @@ export default function App() {
         image: buildForm.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${buildForm.className}${buildForm.version}`,
         createdAt: new Date().toISOString()
       };
-      const response = await fetch('/api/builds', {
+      const response = await fetch(`${API_BASE}/api/builds`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newBuild)
@@ -631,7 +635,7 @@ export default function App() {
 
   const handleDeleteBuild = async (id: string) => {
     try {
-      const response = await fetch(`/api/builds?id=${id}`, { method: 'DELETE' });
+      const response = await fetch(`${API_BASE}/api/builds?id=${id}`, { method: 'DELETE' });
       if (response.ok) {
         // Update local state
         setBuilds(prev => prev.filter(b => b.id !== id));
@@ -744,7 +748,7 @@ export default function App() {
         createdAt: new Date().toISOString()
       };
 
-      const response = await fetch('/api/utilities', {
+      const response = await fetch(`${API_BASE}/api/utilities`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newPost)
@@ -774,7 +778,7 @@ export default function App() {
 
   const deleteUtilityPost = async (id: string) => {
     try {
-      const response = await fetch(`/api/utilities?id=${id}`, { method: 'DELETE' });
+      const response = await fetch(`${API_BASE}/api/utilities?id=${id}`, { method: 'DELETE' });
       if (response.ok) {
         setUtilities(prev => prev.filter(u => u.id !== id));
       } else {
@@ -802,7 +806,7 @@ export default function App() {
         confirmed: null
       };
       console.log("Attempting to add roster member:", newMember);
-      const response = await fetch('/api/roster', {
+      const response = await fetch(`${API_BASE}/api/roster`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newMember)
@@ -830,7 +834,7 @@ export default function App() {
 
   const deleteRosterMember = async (id: string) => {
     try {
-      const response = await fetch(`/api/roster?id=${id}`, { method: 'DELETE' });
+      const response = await fetch(`${API_BASE}/api/roster?id=${id}`, { method: 'DELETE' });
       if (response.ok) {
         // Update local state immediately
         setRoster(prev => prev.filter(m => m.id !== id));
@@ -847,7 +851,7 @@ export default function App() {
       // Optimistic update
       setRoster(prev => prev.map(m => m.id === id ? { ...m, name: newName } : m));
       
-      await fetch('/api/roster', {
+      await fetch(`${API_BASE}/api/roster`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, name: newName })
@@ -863,7 +867,7 @@ export default function App() {
       // Optimistic update
       setRoster(prev => prev.map(m => m.id === id ? { ...m, className: newClass, version: newVersion } : m));
       
-      await fetch('/api/roster', {
+      await fetch(`${API_BASE}/api/roster`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, className: newClass, version: newVersion })
@@ -883,7 +887,7 @@ export default function App() {
       
       // Update each member in the spreadsheet
       await Promise.all(roster.map(m => 
-        fetch('/api/roster', {
+        fetch(`${API_BASE}/api/roster`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: m.id, confirmed: null })
@@ -907,7 +911,7 @@ export default function App() {
     setRoster(prev => prev.map(m => m.id === id ? { ...m, confirmed: newStatus } : m));
 
     try {
-      await fetch('/api/roster', {
+      await fetch(`${API_BASE}/api/roster`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -1137,7 +1141,7 @@ export default function App() {
         category: formCategory
       };
 
-      await fetch('/api/events', {
+      await fetch(`${API_BASE}/api/events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newEvent)
@@ -2480,7 +2484,7 @@ export default function App() {
                                   onClick={async () => {
                                     if (currentUser) {
                                       try {
-                                        await fetch('/api/users', {
+                                        await fetch(`${API_BASE}/api/users`, {
                                           method: 'POST',
                                           headers: { 'Content-Type': 'application/json' },
                                           body: JSON.stringify({
@@ -2521,7 +2525,7 @@ export default function App() {
                                               return;
                                             }
                                             try {
-                                              await fetch('/api/users', {
+                                              await fetch(`${API_BASE}/api/users`, {
                                                 method: 'POST',
                                                 headers: { 'Content-Type': 'application/json' },
                                                 body: JSON.stringify({ uid: u.uid || u.id, role: updatedRole })
@@ -2545,7 +2549,7 @@ export default function App() {
                                               return;
                                             }
                                             try {
-                                              await fetch('/api/users', {
+                                              await fetch(`${API_BASE}/api/users`, {
                                                 method: 'POST',
                                                 headers: { 'Content-Type': 'application/json' },
                                                 body: JSON.stringify({ uid: u.uid || u.id, approved: newApproved })
@@ -2566,7 +2570,7 @@ export default function App() {
                                         onClick={async () => {
                                           if (window.confirm(`Deseja realmente excluir o perfil de ${u.username || u.email}?`)) {
                                             try {
-                                              await fetch(`/api/users?id=${u.uid || u.id}`, { method: 'DELETE' });
+                                              await fetch(`${API_BASE}/api/users?id=${u.uid || u.id}`, { method: 'DELETE' });
                                               setUsers(prev => prev.filter(user => (user.uid !== (u.uid || u.id) && user.id !== (u.uid || u.id))));
                                             } catch (err) {
                                               console.error("Error deleting user:", err);
