@@ -1,16 +1,8 @@
 {
   "rewrites": [
     {
-      "source": "/api/events",
-      "destination": "https://script.google.com/macros/s/AKfycbzmhOccQ8mlyueZbqQBZ95KuqW75PXi1GOEqdlSY_IK6875UyIeMozxj1G1-gSRdjkQzQ/exec?aba=events"
-    },
-    {
-      "source": "/api/builds",
-      "destination": "https://script.google.com/macros/s/AKfycbzmhOccQ8mlyueZbqQBZ95KuqW75PXi1GOEqdlSY_IK6875UyIeMozxj1G1-gSRdjkQzQ/exec?aba=builds"
-    },
-    {
-      "source": "/api/utilities",
-      "destination": "https://script.google.com/macros/s/AKfycbzmhOccQ8mlyueZbqQBZ95KuqW75PXi1GOEqdlSY_IK6875UyIeMozxj1G1-gSRdjkQzQ/exec?aba=utilities"
+      "source": "/api/:aba",
+      "destination": "https://script.google.com/macros/s/AKfycbzmhOccQ8mlyueZbqQBZ95KuqW75PXi1GOEqdlSY_IK6875UyIeMozxj1G1-gSRdjkQzQ/exec?aba=:aba"
     }
   ]
 }
