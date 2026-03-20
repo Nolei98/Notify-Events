@@ -63,6 +63,13 @@ enum OperationType {
   WRITE = 'write',
 }
 
+const generateId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+};
+
 interface FirestoreErrorInfo {
   error: string;
   operationType: OperationType;
@@ -525,7 +532,7 @@ export default function App() {
     try {
       const newBuild = {
         ...buildForm,
-        id: buildForm.id || crypto.randomUUID(),
+        id: buildForm.id || generateId(),
         image: buildForm.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${buildForm.className}${buildForm.version}`,
         createdAt: new Date().toISOString()
       };
@@ -652,7 +659,7 @@ export default function App() {
         setEditingUtilityId(null);
       } else {
         const newPost = {
-          id: crypto.randomUUID(),
+          id: generateId(),
           title: utilityForm.title,
           content: utilityForm.content,
           category: utilityForm.category,
@@ -688,7 +695,7 @@ export default function App() {
     if (!rosterFormClass) return;
     try {
       const newMember = {
-        id: crypto.randomUUID(),
+        id: generateId(),
         name: rosterFormName.trim() || '',
         className: rosterFormClass,
         version: rosterFormVersion.trim() || 'Default',
@@ -951,7 +958,7 @@ export default function App() {
 
     try {
       const newEvent = {
-        id: crypto.randomUUID(),
+        id: generateId(),
         name: formTitle,
         description: formDesc || 'Evento criado pela Staff.',
         prizes: formPrize ? formPrize.split(',').map(p => p.trim()) : ['Premiação a definir'],

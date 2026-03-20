@@ -9,30 +9,37 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Google Sheets Configuration
-const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
-const SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-const PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID || process.env.PLANILHA_ID || '1vPWte_xhOopcJQw8KVwtW6JtHcUo5LeGnFUOo_KI4XU';
+const SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || process.env.GOOGLE_CLIENT_EMAIL;
+const PRIVATE_KEY = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 
 async function getDoc() {
   if (!SPREADSHEET_ID || !SERVICE_ACCOUNT_EMAIL || !PRIVATE_KEY) {
     throw new Error('Google Sheets credentials are not configured. Please set GOOGLE_SHEET_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL, and GOOGLE_PRIVATE_KEY in your environment variables.');
   }
 
-  const serviceAccountAuth = new JWT({
-    email: SERVICE_ACCOUNT_EMAIL,
-    key: PRIVATE_KEY,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-  });
+  try {
+    const serviceAccountAuth = new JWT({
+      email: SERVICE_ACCOUNT_EMAIL,
+      key: PRIVATE_KEY,
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
 
-  const doc = new GoogleSpreadsheet(SPREADSHEET_ID, serviceAccountAuth);
-  await doc.loadInfo();
-  return doc;
+    const doc = new GoogleSpreadsheet(SPREADSHEET_ID, serviceAccountAuth);
+    await doc.loadInfo();
+    console.log(`Successfully connected to spreadsheet: ${doc.title}`);
+    return doc;
+  } catch (error: any) {
+    console.error('Error connecting to Google Sheets:', error.message);
+    throw error;
+  }
 }
 
 async function getSheet(doc: any, title: string, initialData?: any) {
   let sheet = doc.sheetsByTitle[title];
   if (!sheet) {
-    const headers = initialData ? Object.keys(initialData) : ['id'];
+    console.log(`Sheet "${title}" not found, creating it...`);
+    const headers = initialData ? Object.keys(stringifyData(initialData)) : ['id'];
     sheet = await doc.addSheet({ title, headerValues: headers });
   }
   return sheet;
@@ -42,8 +49,17 @@ function parseRow(row: any, headers: string[]) {
   const data: any = {};
   headers.forEach(header => {
     const val = row.get(header);
+    if (val === undefined || val === null || val === '') {
+      data[header] = null;
+      return;
+    }
     try {
-      data[header] = JSON.parse(val);
+      // Only try to parse if it looks like JSON
+      if (typeof val === 'string' && (val.startsWith('{') || val.startsWith('['))) {
+        data[header] = JSON.parse(val);
+      } else {
+        data[header] = val;
+      }
     } catch {
       data[header] = val;
     }
@@ -54,7 +70,14 @@ function parseRow(row: any, headers: string[]) {
 function stringifyData(data: any) {
   const row: any = {};
   Object.keys(data).forEach(key => {
-    row[key] = typeof data[key] === 'object' ? JSON.stringify(data[key]) : data[key];
+    const val = data[key];
+    if (val === null || val === undefined) {
+      row[key] = '';
+    } else if (typeof val === 'object') {
+      row[key] = JSON.stringify(val);
+    } else {
+      row[key] = val;
+    }
   });
   return row;
 }
@@ -86,19 +109,27 @@ async function startServer() {
     try {
       const { collection } = req.params;
       const data = req.body;
+      console.log(`POST /api/${collection} - Received data:`, JSON.stringify(data).substring(0, 100) + '...');
+      
       const doc = await getDoc();
       const sheet = await getSheet(doc, collection, data);
       
       // Ensure headers are loaded
-      await sheet.loadHeaderRow();
-      const currentHeaders = sheet.headerValues;
+      try {
+        await sheet.loadHeaderRow();
+      } catch (e) {
+        console.log(`No header row found for ${collection}, using initial data keys.`);
+        const headers = Object.keys(stringifyData(data));
+        await sheet.setHeaderRow(headers);
+      }
       
+      const currentHeaders = sheet.headerValues;
       const rowData = stringifyData(data);
       const idKey = collection === 'users' ? 'uid' : 'id';
       const idValue = String(data[idKey]);
 
       if (!idValue || idValue === 'undefined') {
-        throw new Error(`Missing ID value for ${idKey}`);
+        throw new Error(`Missing ID value for ${idKey} in collection ${collection}`);
       }
 
       // Check for new columns and update headers if necessary
@@ -113,7 +144,6 @@ async function startServer() {
 
       if (existingRow) {
         console.log(`Updating existing row in ${collection} with ID ${idValue}`);
-        // Update row properties
         Object.keys(rowData).forEach(key => {
           existingRow.set(key, rowData[key]);
         });
@@ -126,6 +156,7 @@ async function startServer() {
       res.json({ success: true });
     } catch (error: any) {
       console.error(`Error saving to ${req.params.collection}:`, error.message);
+      if (error.stack) console.error(error.stack);
       res.status(500).json({ error: error.message });
     }
   });
