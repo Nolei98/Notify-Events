@@ -442,11 +442,16 @@ export default function App() {
         createdAt: new Date().toISOString()
       };
 
-      await fetch('/api/users', {
+      const response = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newProfile)
       });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to save user profile');
+      }
 
       setUserProfile(newProfile);
     } catch (error: any) {
@@ -524,11 +529,16 @@ export default function App() {
         image: buildForm.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${buildForm.className}${buildForm.version}`,
         createdAt: new Date().toISOString()
       };
-      await fetch('/api/builds', {
+      const response = await fetch('/api/builds', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newBuild)
       });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to save build');
+      }
       setIsBuildAdminOpen(false);
     } catch (err) {
       console.error("Error adding build:", err);
@@ -628,7 +638,7 @@ export default function App() {
     
     try {
       if (editingUtilityId) {
-        await fetch('/api/utilities', {
+        const response = await fetch('/api/utilities', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -638,6 +648,7 @@ export default function App() {
             category: utilityForm.category
           })
         });
+        if (!response.ok) throw new Error('Failed to update utility');
         setEditingUtilityId(null);
       } else {
         const newPost = {
@@ -648,11 +659,12 @@ export default function App() {
           author: userProfile?.username || 'Admin',
           createdAt: new Date().toISOString()
         };
-        await fetch('/api/utilities', {
+        const response = await fetch('/api/utilities', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newPost)
         });
+        if (!response.ok) throw new Error('Failed to create utility');
       }
       
       setUtilityForm({ title: '', content: '', category: isAdmin ? utilityCategories[0] : playerAllowedCategory });
@@ -682,11 +694,12 @@ export default function App() {
         version: rosterFormVersion.trim() || 'Default',
         confirmed: null
       };
-      await fetch('/api/roster', {
+      const response = await fetch('/api/roster', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newMember)
       });
+      if (!response.ok) throw new Error('Failed to add roster member');
       setRosterFormName('');
       setRosterFormClass('');
       setRosterFormVersion('');

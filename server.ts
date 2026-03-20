@@ -89,30 +89,43 @@ async function startServer() {
       const doc = await getDoc();
       const sheet = await getSheet(doc, collection, data);
       
-      const rows = await sheet.getRows();
-      const idKey = collection === 'users' ? 'uid' : 'id';
-      const existingRow = rows.find(row => row.get(idKey) === data[idKey]);
-
+      // Ensure headers are loaded
+      await sheet.loadHeaderRow();
+      const currentHeaders = sheet.headerValues;
+      
       const rowData = stringifyData(data);
+      const idKey = collection === 'users' ? 'uid' : 'id';
+      const idValue = String(data[idKey]);
+
+      if (!idValue || idValue === 'undefined') {
+        throw new Error(`Missing ID value for ${idKey}`);
+      }
+
+      // Check for new columns and update headers if necessary
+      const newKeys = Object.keys(rowData).filter(k => !currentHeaders.includes(k));
+      if (newKeys.length > 0) {
+        console.log(`Updating headers for ${collection}: adding ${newKeys.join(', ')}`);
+        await sheet.setHeaderRow([...currentHeaders, ...newKeys]);
+      }
+
+      const rows = await sheet.getRows();
+      const existingRow = rows.find(row => String(row.get(idKey)) === idValue);
 
       if (existingRow) {
-        // Update existing row
-        Object.assign(existingRow, rowData);
+        console.log(`Updating existing row in ${collection} with ID ${idValue}`);
+        // Update row properties
+        Object.keys(rowData).forEach(key => {
+          existingRow.set(key, rowData[key]);
+        });
         await existingRow.save();
       } else {
-        // Add new row
-        // Ensure all headers exist
-        const currentHeaders = sheet.headerValues;
-        const newKeys = Object.keys(rowData).filter(k => !currentHeaders.includes(k));
-        if (newKeys.length > 0) {
-          await sheet.setHeaderRow([...currentHeaders, ...newKeys]);
-        }
+        console.log(`Adding new row to ${collection} with ID ${idValue}`);
         await sheet.addRow(rowData);
       }
       
       res.json({ success: true });
     } catch (error: any) {
-      console.error(`Error saving ${req.params.collection}:`, error.message);
+      console.error(`Error saving to ${req.params.collection}:`, error.message);
       res.status(500).json({ error: error.message });
     }
   });
