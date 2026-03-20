@@ -62,9 +62,26 @@ import {
   getDocs,
   query,
   where,
-  serverTimestamp
+  serverTimestamp,
+  getDocFromServer
 } from 'firebase/firestore';
+
 import ErrorBoundary from './components/ErrorBoundary';
+
+const testConnection = async () => {
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+    console.log("Firebase connection successful.");
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.error("Firebase connection error: the client is offline. Please check your Firebase configuration.");
+    } else {
+      // Skip logging for other errors, as this is simply a connection test.
+    }
+  }
+};
+
+testConnection();
 
 enum OperationType {
   CREATE = 'create',
@@ -369,9 +386,20 @@ export default function App() {
     // Real-time listener for current user profile to reflect approval status instantly
     const unsubProfile = onSnapshot(doc(db, 'users', currentUser.uid), (snapshot) => {
       if (snapshot.exists()) {
-        setUserProfile(snapshot.data());
+        const data = snapshot.data();
+        // Only update if data actually changed to avoid unnecessary re-renders
+        setUserProfile((prev: any) => {
+          if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
+          return data;
+        });
       }
     }, (err) => handleFirestoreError(err, OperationType.GET, `users/${currentUser.uid}`));
+
+    return () => unsubProfile();
+  }, [isAuthReady, currentUser?.uid]);
+
+  useEffect(() => {
+    if (!isAuthReady || !currentUser) return;
 
     const unsubRoster = onSnapshot(collection(db, 'roster'), (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RosterMember));
@@ -399,24 +427,28 @@ export default function App() {
       setBuilds(data);
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'builds'));
 
-    let unsubUsers = () => {};
-    if (userProfile?.role === 'admin') {
-      unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-        setUsers(data);
-      }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
-    }
-
     return () => {
-      unsubProfile();
       unsubRoster();
       unsubWoe();
       unsubEvents();
       unsubUtilities();
       unsubBuilds();
-      unsubUsers();
     };
-  }, [isAuthReady, currentUser, userProfile]);
+  }, [isAuthReady, currentUser?.uid]);
+
+  useEffect(() => {
+    if (!isAuthReady || !currentUser || userProfile?.role !== 'admin') {
+      setUsers([]);
+      return;
+    }
+
+    const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+      setUsers(data);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
+
+    return () => unsubUsers();
+  }, [isAuthReady, currentUser?.uid, userProfile?.role]);
 
   // Derived Login State
   const isLoggedIn = !!currentUser;
@@ -2246,7 +2278,7 @@ export default function App() {
                   </AnimatePresence>
 
                   <div className="space-y-3">
-                    {roster.map((member, index) => (
+                    {roster.slice().sort((a, b) => a.className.localeCompare(b.className)).map((member, index) => (
                       <motion.div 
                         key={member.id}
                         layout
@@ -2560,6 +2592,16 @@ export default function App() {
             >
               {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
             </button>
+            {isLoggedIn && userProfile && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px] font-black text-emerald-500">
+                  {userProfile.username[0].toUpperCase()}
+                </div>
+                <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest hidden sm:inline">
+                  {userProfile.username}
+                </span>
+              </div>
+            )}
             {isLoggedIn && (
               <button 
                 onClick={handleLogout}

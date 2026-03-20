@@ -4,23 +4,53 @@ service cloud.firestore {
     // ===============================================================
     // Assumed Data Model
     // ===============================================================
+    //
     // Collection: users
-    // Fields: username (string), role (string)
+    // Document ID: Firebase Auth UID
+    // Fields:
+    //   - username: string (required, 1-50 chars)
+    //   - role: string (required, enum: ['admin', 'player'])
+    //   - approved: boolean (required)
     //
     // Collection: roster
-    // Fields: name (string), className (string), confirmed (bool)
+    // Document ID: Auto-generated
+    // Fields:
+    //   - name: string (required, 1-50 chars)
+    //   - className: string (required, 1-50 chars)
+    //   - confirmed: boolean (required)
     //
     // Collection: builds
-    // Fields: title, className, description, author, createdAt
+    // Document ID: Auto-generated
+    // Fields:
+    //   - title: string (required, 1-100 chars)
+    //   - className: string (required, 1-50 chars)
+    //   - description: string (required, 1-5000 chars)
+    //   - author: string (required, 1-50 chars)
+    //   - createdAt: timestamp (required)
     //
     // Collection: utilities
-    // Fields: title, content, category, author, createdAt
+    // Document ID: Auto-generated
+    // Fields:
+    //   - title: string (required, 1-100 chars)
+    //   - content: string (required, 1-10000 chars)
+    //   - category: string (required, 1-50 chars)
+    //   - author: string (required, 1-50 chars)
+    //   - createdAt: timestamp (required)
     //
     // Collection: events
-    // Fields: title, date, description
+    // Document ID: Auto-generated
+    // Fields:
+    //   - title: string (required, 1-100 chars)
+    //   - date: string (required, ISO 8601)
+    //   - description: string (required, 1-1000 chars)
     //
     // Collection: settings/woe
-    // Fields: days (list), startTime, endTime
+    // Document ID: woe
+    // Fields:
+    //   - days: list (required, max 7)
+    //   - startTime: string (required)
+    //   - endTime: string (required)
+    //
     // ===============================================================
 
     // Helper Functions
@@ -38,15 +68,81 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidString(field, min, max) {
+      return request.resource.data[field] is string &&
+             request.resource.data[field].size() >= min &&
+             request.resource.data[field].size() <= max;
+    }
+
+    // Domain Validators
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['username', 'role', 'approved']) &&
+             hasRequiredFields(['username', 'role', 'approved']) &&
+             data.username is string && data.username.size() >= 1 && data.username.size() <= 50 &&
+             data.role in ['admin', 'player'] &&
+             data.approved is bool;
+    }
+
+    function isValidMember(data) {
+      return hasOnlyAllowedFields(['name', 'className', 'confirmed']) &&
+             hasRequiredFields(['name', 'className', 'confirmed']) &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 50 &&
+             data.className is string && data.className.size() >= 1 && data.className.size() <= 50 &&
+             data.confirmed is bool;
+    }
+
+    function isValidBuild(data) {
+      return hasOnlyAllowedFields(['title', 'className', 'description', 'author', 'createdAt']) &&
+             hasRequiredFields(['title', 'className', 'description', 'author', 'createdAt']) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 100 &&
+             data.className is string && data.className.size() >= 1 && data.className.size() <= 50 &&
+             data.description is string && data.description.size() >= 1 && data.description.size() <= 5000 &&
+             data.author is string && data.author.size() >= 1 && data.author.size() <= 50 &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidUtility(data) {
+      return hasOnlyAllowedFields(['title', 'content', 'category', 'author', 'createdAt']) &&
+             hasRequiredFields(['title', 'content', 'category', 'author', 'createdAt']) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 100 &&
+             data.content is string && data.content.size() >= 1 && data.content.size() <= 10000 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 50 &&
+             data.author is string && data.author.size() >= 1 && data.author.size() <= 50 &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidEvent(data) {
+      return hasOnlyAllowedFields(['title', 'date', 'description']) &&
+             hasRequiredFields(['title', 'date', 'description']) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 100 &&
+             data.date is string && data.date.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$") &&
+             data.description is string && data.description.size() >= 1 && data.description.size() <= 1000;
+    }
+
+    function isValidWoe(data) {
+      return hasOnlyAllowedFields(['days', 'startTime', 'endTime']) &&
+             hasRequiredFields(['days', 'startTime', 'endTime']) &&
+             data.days is list && data.days.size() <= 7 &&
+             data.startTime is string && data.endTime is string;
+    }
+
     // Rules
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId) && 
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) &&
                       (isAdmin() || 
                        (request.resource.data.role == 'player' && 
                         request.resource.data.approved == false));
-      allow update: if isAdmin() || 
-                      (isOwner(userId) && 
+      allow update: if (isAdmin() && isValidUser(request.resource.data)) || 
+                      (isOwner(userId) && isValidUser(request.resource.data) &&
                        request.resource.data.role == resource.data.role && 
                        request.resource.data.approved == resource.data.approved);
       allow delete: if isAdmin();
@@ -54,27 +150,31 @@ service cloud.firestore {
 
     match /roster/{memberId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow create, update: if isAdmin() && isValidMember(request.resource.data);
+      allow delete: if isAdmin();
     }
 
     match /settings/woe {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow write: if isAdmin() && isValidWoe(request.resource.data);
     }
 
     match /builds/{buildId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow create, update: if isAdmin() && isValidBuild(request.resource.data);
+      allow delete: if isAdmin();
     }
 
     match /utilities/{utilityId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow create, update: if isAdmin() && isValidUtility(request.resource.data);
+      allow delete: if isAdmin();
     }
 
     match /events/{eventId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow create, update: if isAdmin() && isValidEvent(request.resource.data);
+      allow delete: if isAdmin();
     }
   }
 }
