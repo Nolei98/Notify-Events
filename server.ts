@@ -4,7 +4,6 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { GoogleSpreadsheet } from 'google-spreadsheet';
 import { JWT } from 'google-auth-library';
-import cors from "cors";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -99,12 +98,18 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Configuração ultra-permissiva de CORS para teste
-  app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-  }));
+  // Middleware manual para garantir CORS em todas as respostas
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    
+    // Responde imediatamente a requisições OPTIONS (pre-flight)
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    next();
+  });
 
   app.use(express.json({ limit: '10mb' }));
 
