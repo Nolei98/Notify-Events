@@ -40,7 +40,8 @@ import {
   Search,
   Download,
   Filter,
-  Edit
+  Edit,
+  LogOut
 } from 'lucide-react';
 import { RAGNAROK_EVENTS, ROEvent } from './constants';
 import { auth, db } from './firebase';
@@ -112,8 +113,11 @@ interface FirestoreErrorInfo {
 }
 
 const handleFirestoreError = (error: unknown, operationType: OperationType, path: string | null) => {
+  const errorMsg = error instanceof Error ? error.message : String(error);
+  const isQuotaError = errorMsg.includes('Quota exceeded') || errorMsg.includes('Quota limit exceeded');
+  
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errorMsg,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -130,7 +134,13 @@ const handleFirestoreError = (error: unknown, operationType: OperationType, path
     operationType,
     path
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
+
+  if (isQuotaError) {
+    console.warn('Firestore Quota Exceeded. The app will show a friendly message to the user.');
+  } else {
+    console.error('Firestore Error: ', JSON.stringify(errInfo));
+  }
+  
   throw new Error(JSON.stringify(errInfo));
 };
 
@@ -368,8 +378,8 @@ export default function App() {
             await setDoc(doc(db, 'users', user.uid), newProfile);
             setUserProfile(newProfile);
           }
-        } catch (error) {
-          console.error("Error fetching user profile:", error);
+        } catch (err) {
+          handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
         }
       } else {
         setUserProfile(null);
@@ -452,7 +462,7 @@ export default function App() {
 
   // Derived Login State
   const isLoggedIn = !!currentUser;
-  const isAdmin = userProfile?.role === 'admin';
+  const isAdmin = userProfile?.role === 'admin' || currentUser?.email === 'noleirodrigues@gmail.com';
   const [loginUserInput, setLoginUserInput] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPass, setLoginPass] = useState('');
@@ -2076,9 +2086,14 @@ export default function App() {
                     {isAdmin && (
                       <button 
                         onClick={() => setIsRosterAdminOpen(!isRosterAdminOpen)}
-                        className="text-[10px] font-black text-yellow-500 uppercase tracking-widest hover:underline flex items-center gap-1"
+                        className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 border ${
+                          isRosterAdminOpen 
+                          ? 'bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500 hover:text-white' 
+                          : 'bg-yellow-500/20 text-yellow-500 border-yellow-500/30 hover:bg-yellow-500 hover:text-white shadow-lg shadow-yellow-500/10'
+                        }`}
                       >
-                        <Settings size={12} /> {isRosterAdminOpen ? 'Fechar Admin' : 'Gerenciar'}
+                        <Settings size={12} className={isRosterAdminOpen ? 'rotate-90' : ''} /> 
+                        {isRosterAdminOpen ? 'Fechar Painel' : 'Gerenciar Plantel'}
                       </button>
                     )}
                   </div>
@@ -2579,10 +2594,11 @@ export default function App() {
             {isAdmin && (
               <button 
                 onClick={() => setIsStaffPanelOpen(true)}
-                className="p-2 rounded-lg bg-emerald-900/40 text-emerald-400 hover:text-white hover:bg-emerald-800/40 transition-colors"
-                title="Adicionar Evento Staff"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all border border-emerald-500/30 shadow-lg shadow-emerald-500/10"
+                title="Painel da Staff - Criar Eventos"
               >
-                <Plus size={20} />
+                <Plus size={18} />
+                <span className="text-[10px] font-black uppercase tracking-widest">Staff Panel</span>
               </button>
             )}
             <button 
@@ -2592,23 +2608,39 @@ export default function App() {
             >
               {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
             </button>
-            {isLoggedIn && userProfile && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-                <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-[10px] font-black text-emerald-500">
-                  {userProfile.username[0].toUpperCase()}
+            {isLoggedIn && (
+              <div className="flex items-center gap-3 px-4 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl shadow-inner shadow-emerald-500/5">
+                <div className="relative">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-yellow-500 p-0.5 shadow-lg">
+                    <div className="w-full h-full rounded-full bg-zinc-900 flex items-center justify-center text-xs font-black text-emerald-400">
+                      {(userProfile?.username || currentUser?.email || 'U')[0].toUpperCase()}
+                    </div>
+                  </div>
+                  {isAdmin && (
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-500 rounded-full border-2 border-zinc-950 flex items-center justify-center" title="Administrador">
+                      <ShieldCheck size={8} className="text-zinc-950" />
+                    </div>
+                  )}
                 </div>
-                <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest hidden sm:inline">
-                  {userProfile.username}
-                </span>
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-white uppercase tracking-widest leading-none">
+                    {userProfile?.username || currentUser?.email?.split('@')[0] || 'Usuário'}
+                  </span>
+                  {isAdmin && (
+                    <span className="text-[8px] font-black text-yellow-500 uppercase tracking-tighter mt-0.5">
+                      Administrador
+                    </span>
+                  )}
+                </div>
               </div>
             )}
             {isLoggedIn && (
               <button 
                 onClick={handleLogout}
-                className="p-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-all"
-                title="Sair"
+                className="p-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-all border border-red-500/30"
+                title="Sair da Vila"
               >
-                <X size={20} />
+                <LogOut size={20} />
               </button>
             )}
           </div>
