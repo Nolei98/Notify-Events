@@ -1,219 +1,144 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
-import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { GoogleSpreadsheet } from 'google-spreadsheet';
+import { JWT } from 'google-auth-library';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const DATA_FILE = path.join(__dirname, "data", "roster.json");
-const BUILDS_FILE = path.join(__dirname, "data", "builds.json");
-const USERS_FILE = path.join(__dirname, "data", "users.json");
-const UTILITIES_FILE = path.join(__dirname, "data", "utilities.json");
-const EVENTS_FILE = path.join(__dirname, "data", "events.json");
-const CATEGORIES_FILE = path.join(__dirname, "data", "categories.json");
+// Google Sheets Configuration
+const SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
+const SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+const PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
 
-// Ensure data directory exists
-if (!fs.existsSync(path.join(__dirname, "data"))) {
-  fs.mkdirSync(path.join(__dirname, "data"));
+async function getDoc() {
+  if (!SPREADSHEET_ID || !SERVICE_ACCOUNT_EMAIL || !PRIVATE_KEY) {
+    throw new Error('Google Sheets credentials are not configured. Please set GOOGLE_SHEET_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL, and GOOGLE_PRIVATE_KEY in your environment variables.');
+  }
+
+  const serviceAccountAuth = new JWT({
+    email: SERVICE_ACCOUNT_EMAIL,
+    key: PRIVATE_KEY,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+  });
+
+  const doc = new GoogleSpreadsheet(SPREADSHEET_ID, serviceAccountAuth);
+  await doc.loadInfo();
+  return doc;
 }
 
-// Initial data if file doesn't exist
-if (!fs.existsSync(DATA_FILE)) {
-  const initialData = {
-    roster: [
-      { id: '1', name: 'Nolei', className: 'Lord Knight', confirmed: true },
-      { id: '2', name: 'Creative', className: 'High Priest', confirmed: null },
-      { id: '3', name: 'Player1', className: 'Sniper', confirmed: false },
-    ],
-    woeSchedule: { days: ['Terça', 'Quinta', 'Sábado'], startTime: '20:00', endTime: '21:00' }
-  };
-  fs.writeFileSync(DATA_FILE, JSON.stringify(initialData, null, 2));
+async function getSheet(doc: any, title: string, initialData?: any) {
+  let sheet = doc.sheetsByTitle[title];
+  if (!sheet) {
+    const headers = initialData ? Object.keys(initialData) : ['id'];
+    sheet = await doc.addSheet({ title, headerValues: headers });
+  }
+  return sheet;
 }
 
-if (!fs.existsSync(BUILDS_FILE)) {
-  const initialBuilds = {
-    builds: []
-  };
-  fs.writeFileSync(BUILDS_FILE, JSON.stringify(initialBuilds, null, 2));
+function parseRow(row: any, headers: string[]) {
+  const data: any = {};
+  headers.forEach(header => {
+    const val = row.get(header);
+    try {
+      data[header] = JSON.parse(val);
+    } catch {
+      data[header] = val;
+    }
+  });
+  return data;
 }
 
-if (!fs.existsSync(USERS_FILE)) {
-  const initialUsers = [
-    { id: '1', username: 'administrador', password: 'admin123', role: 'admin' },
-    { id: '2', username: 'jogador', password: '1234', role: 'player' }
-  ];
-  fs.writeFileSync(USERS_FILE, JSON.stringify(initialUsers, null, 2));
-}
-
-if (!fs.existsSync(UTILITIES_FILE)) {
-  const initialUtilities = [];
-  fs.writeFileSync(UTILITIES_FILE, JSON.stringify(initialUtilities, null, 2));
-}
-
-if (!fs.existsSync(EVENTS_FILE)) {
-  const initialEvents = [];
-  fs.writeFileSync(EVENTS_FILE, JSON.stringify(initialEvents, null, 2));
-}
-
-if (!fs.existsSync(CATEGORIES_FILE)) {
-  const initialCategories = {
-    utilityCategories: ['Geral', 'Guias', 'Dicas', 'Anúncios', 'Outros'],
-    playerAllowedCategory: ''
-  };
-  fs.writeFileSync(CATEGORIES_FILE, JSON.stringify(initialCategories, null, 2));
+function stringifyData(data: any) {
+  const row: any = {};
+  Object.keys(data).forEach(key => {
+    row[key] = typeof data[key] === 'object' ? JSON.stringify(data[key]) : data[key];
+  });
+  return row;
 }
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '10mb' }));
 
-  // API Routes
-  app.get("/api/data", (req, res) => {
+  // API Routes for Google Sheets
+  app.get("/api/:collection", async (req, res) => {
     try {
-      const data = fs.readFileSync(DATA_FILE, "utf-8");
-      res.json(JSON.parse(data));
-    } catch (error) {
-      res.status(500).json({ error: "Failed to read data" });
+      const { collection } = req.params;
+      const doc = await getDoc();
+      const sheet = doc.sheetsByTitle[collection];
+      if (!sheet) return res.json([]);
+      
+      const rows = await sheet.getRows();
+      const data = rows.map(row => parseRow(row, sheet.headerValues));
+      res.json(data);
+    } catch (error: any) {
+      console.error(`Error reading ${req.params.collection}:`, error.message);
+      res.status(500).json({ error: error.message });
     }
   });
 
-  app.post("/api/data", (req, res) => {
+  app.post("/api/:collection", async (req, res) => {
     try {
-      const newData = req.body;
-      fs.writeFileSync(DATA_FILE, JSON.stringify(newData, null, 2));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to save data" });
-    }
-  });
+      const { collection } = req.params;
+      const data = req.body;
+      const doc = await getDoc();
+      const sheet = await getSheet(doc, collection, data);
+      
+      const rows = await sheet.getRows();
+      const idKey = collection === 'users' ? 'uid' : 'id';
+      const existingRow = rows.find(row => row.get(idKey) === data[idKey]);
 
-  app.get("/api/builds", (req, res) => {
-    try {
-      const data = fs.readFileSync(BUILDS_FILE, "utf-8");
-      res.json(JSON.parse(data));
-    } catch (error) {
-      res.status(500).json({ error: "Failed to read builds" });
-    }
-  });
+      const rowData = stringifyData(data);
 
-  app.post("/api/builds", (req, res) => {
-    try {
-      const newData = req.body;
-      fs.writeFileSync(BUILDS_FILE, JSON.stringify(newData, null, 2));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to save builds" });
-    }
-  });
-
-  app.get("/api/users", (req, res) => {
-    try {
-      if (fs.existsSync(USERS_FILE)) {
-        const data = fs.readFileSync(USERS_FILE, "utf-8");
-        res.json(JSON.parse(data));
+      if (existingRow) {
+        // Update existing row
+        Object.assign(existingRow, rowData);
+        await existingRow.save();
       } else {
-        res.json([]);
+        // Add new row
+        // Ensure all headers exist
+        const currentHeaders = sheet.headerValues;
+        const newKeys = Object.keys(rowData).filter(k => !currentHeaders.includes(k));
+        if (newKeys.length > 0) {
+          await sheet.setHeaderRow([...currentHeaders, ...newKeys]);
+        }
+        await sheet.addRow(rowData);
       }
-    } catch (error) {
-      console.error("Error reading users:", error);
-      res.status(500).json({ error: "Failed to read users" });
-    }
-  });
-
-  app.post("/api/users", (req, res) => {
-    try {
-      const newData = req.body;
-      if (Array.isArray(newData)) {
-        fs.writeFileSync(USERS_FILE, JSON.stringify(newData, null, 2));
-        res.json({ success: true });
-      } else {
-        res.status(400).json({ error: "Invalid data format" });
-      }
-    } catch (error) {
-      console.error("Error saving users:", error);
-      res.status(500).json({ error: "Failed to save users" });
-    }
-  });
-
-  app.post("/api/login", (req, res) => {
-    try {
-      const { username, password } = req.body;
-      if (!fs.existsSync(USERS_FILE)) {
-        return res.status(401).json({ error: "Credenciais inválidas" });
-      }
-      const users = JSON.parse(fs.readFileSync(USERS_FILE, "utf-8"));
-      const user = users.find((u: any) => u.username.toLowerCase() === username.toLowerCase() && u.password === password);
-      if (user) {
-        res.json({ 
-          success: true, 
-          user: { id: user.id, username: user.username, role: user.role } 
-        });
-      } else {
-        res.status(401).json({ error: "Usuário ou senha incorretos" });
-      }
-    } catch (error) {
-      res.status(500).json({ error: "Erro no servidor" });
-    }
-  });
-
-  app.get("/api/utilities", (req, res) => {
-    try {
-      const data = fs.readFileSync(UTILITIES_FILE, "utf-8");
-      res.json(JSON.parse(data));
-    } catch (error) {
-      res.status(500).json({ error: "Failed to read utilities" });
-    }
-  });
-
-  app.post("/api/utilities", (req, res) => {
-    try {
-      const newData = req.body;
-      fs.writeFileSync(UTILITIES_FILE, JSON.stringify(newData, null, 2));
+      
       res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to save utilities" });
+    } catch (error: any) {
+      console.error(`Error saving ${req.params.collection}:`, error.message);
+      res.status(500).json({ error: error.message });
     }
   });
 
-  app.get("/api/events", (req, res) => {
+  app.delete("/api/:collection", async (req, res) => {
     try {
-      const data = fs.readFileSync(EVENTS_FILE, "utf-8");
-      res.json(JSON.parse(data));
-    } catch (error) {
-      res.status(500).json({ error: "Failed to read events" });
-    }
-  });
+      const { collection } = req.params;
+      const { id } = req.query;
+      if (!id) return res.status(400).json({ error: "ID is required" });
 
-  app.post("/api/events", (req, res) => {
-    try {
-      const newData = req.body;
-      fs.writeFileSync(EVENTS_FILE, JSON.stringify(newData, null, 2));
+      const doc = await getDoc();
+      const sheet = doc.sheetsByTitle[collection];
+      if (!sheet) return res.json({ success: true });
+
+      const rows = await sheet.getRows();
+      const idKey = collection === 'users' ? 'uid' : 'id';
+      const existingRow = rows.find(row => row.get(idKey) === id);
+
+      if (existingRow) {
+        await existingRow.delete();
+      }
+      
       res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to save events" });
-    }
-  });
-
-  app.get("/api/categories", (req, res) => {
-    try {
-      const data = fs.readFileSync(CATEGORIES_FILE, "utf-8");
-      res.json(JSON.parse(data));
-    } catch (error) {
-      res.status(500).json({ error: "Failed to read categories" });
-    }
-  });
-
-  app.post("/api/categories", (req, res) => {
-    try {
-      const newData = req.body;
-      fs.writeFileSync(CATEGORIES_FILE, JSON.stringify(newData, null, 2));
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to save categories" });
+    } catch (error: any) {
+      console.error(`Error deleting from ${req.params.collection}:`, error.message);
+      res.status(500).json({ error: error.message });
     }
   });
 

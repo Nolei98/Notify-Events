@@ -44,45 +44,15 @@ import {
   LogOut
 } from 'lucide-react';
 import { RAGNAROK_EVENTS, ROEvent } from './constants';
-import { auth, db } from './firebase';
+import { auth } from './firebase';
 import { 
   onAuthStateChanged, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   signOut 
 } from 'firebase/auth';
-import { 
-  collection, 
-  doc, 
-  onSnapshot, 
-  setDoc, 
-  updateDoc, 
-  deleteDoc, 
-  addDoc,
-  getDoc,
-  getDocs,
-  query,
-  where,
-  serverTimestamp,
-  getDocFromServer
-} from 'firebase/firestore';
 
 import ErrorBoundary from './components/ErrorBoundary';
-
-const testConnection = async () => {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    console.log("Firebase connection successful.");
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Firebase connection error: the client is offline. Please check your Firebase configuration.");
-    } else {
-      // Skip logging for other errors, as this is simply a connection test.
-    }
-  }
-};
-
-testConnection();
 
 enum OperationType {
   CREATE = 'create',
@@ -111,38 +81,6 @@ interface FirestoreErrorInfo {
     }[];
   }
 }
-
-const handleFirestoreError = (error: unknown, operationType: OperationType, path: string | null) => {
-  const errorMsg = error instanceof Error ? error.message : String(error);
-  const isQuotaError = errorMsg.includes('Quota exceeded') || errorMsg.includes('Quota limit exceeded');
-  
-  const errInfo: FirestoreErrorInfo = {
-    error: errorMsg,
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
-        providerId: provider.providerId,
-        displayName: provider.displayName,
-        email: provider.email,
-        photoUrl: provider.photoURL
-      })) || []
-    },
-    operationType,
-    path
-  };
-
-  if (isQuotaError) {
-    console.warn('Firestore Quota Exceeded. The app will show a friendly message to the user.');
-  } else {
-    console.error('Firestore Error: ', JSON.stringify(errInfo));
-  }
-  
-  throw new Error(JSON.stringify(errInfo));
-};
 
 export interface BuildEquipment {
   name: string;
@@ -342,6 +280,19 @@ export default function App() {
 
   // Utilities State
   const [utilities, setUtilities] = useState<UtilityPost[]>([]);
+  const [quotaExceeded, setQuotaExceeded] = useState(false);
+
+  const handleApiError = (error: unknown, operationType: OperationType, path: string | null) => {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    const isQuotaError = errorMsg.includes('Quota exceeded') || errorMsg.includes('Quota limit exceeded') || errorMsg.includes('credentials');
+    
+    if (isQuotaError) {
+      setQuotaExceeded(true);
+      console.warn('API Quota or Configuration Error:', errorMsg);
+    } else {
+      console.error(`API Error (${operationType} at ${path}):`, errorMsg);
+    }
+  };
 
   const [utilityCategories, setUtilityCategories] = useState<string[]>(['Geral', 'Guias', 'Dicas', 'Anúncios', 'Outros']);
   const [playerAllowedCategory, setPlayerAllowedCategory] = useState<string>('');
@@ -357,29 +308,41 @@ export default function App() {
       setCurrentUser(user);
       if (user) {
         try {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            const data = userDoc.data();
+          const users = await fetch('/api/users').then(res => res.json());
+          const profile = Array.isArray(users) ? users.find((u: any) => u.uid === user.uid) : null;
+          
+          if (profile) {
             // Force admin role for the master email if it's not already set
-            if (user.email === 'noleirodrigues@gmail.com' && (data.role !== 'admin' || !data.approved)) {
-              const updatedProfile = { ...data, role: 'admin', approved: true };
-              await setDoc(doc(db, 'users', user.uid), updatedProfile);
+            if (user.email === 'noleirodrigues@gmail.com' && (profile.role !== 'admin' || !profile.approved)) {
+              const updatedProfile = { ...profile, role: 'admin', approved: true };
+              await fetch('/api/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updatedProfile)
+              });
               setUserProfile(updatedProfile);
             } else {
-              setUserProfile(data);
+              setUserProfile(profile);
             }
           } else {
             // Create profile if it doesn't exist
             const newProfile = {
+              uid: user.uid,
               username: user.displayName || user.email?.split('@')[0] || 'User',
               role: user.email === 'noleirodrigues@gmail.com' ? 'admin' : 'player',
-              approved: user.email === 'noleirodrigues@gmail.com'
+              approved: user.email === 'noleirodrigues@gmail.com',
+              email: user.email,
+              createdAt: new Date().toISOString()
             };
-            await setDoc(doc(db, 'users', user.uid), newProfile);
+            await fetch('/api/users', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(newProfile)
+            });
             setUserProfile(newProfile);
           }
         } catch (err) {
-          handleFirestoreError(err, OperationType.GET, `users/${user.uid}`);
+          handleApiError(err, OperationType.GET, `users/${user.uid}`);
         }
       } else {
         setUserProfile(null);
@@ -389,61 +352,43 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Real-time Listeners
+  // Real-time Listeners (Now Polling Google Sheets API)
   useEffect(() => {
     if (!isAuthReady || !currentUser) return;
 
-    // Real-time listener for current user profile to reflect approval status instantly
-    const unsubProfile = onSnapshot(doc(db, 'users', currentUser.uid), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        // Only update if data actually changed to avoid unnecessary re-renders
-        setUserProfile((prev: any) => {
-          if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
-          return data;
-        });
+    const fetchAllData = async () => {
+      try {
+        const [rosterData, woeData, eventsData, utilitiesData, buildsData] = await Promise.all([
+          fetch('/api/roster').then(res => res.json()),
+          fetch('/api/settings_woe').then(res => res.json()),
+          fetch('/api/events').then(res => res.json()),
+          fetch('/api/utilities').then(res => res.json()),
+          fetch('/api/builds').then(res => res.json())
+        ]);
+
+        if (Array.isArray(rosterData)) setRoster(rosterData);
+        if (woeData && woeData[0]) setWoeSchedule(woeData[0]);
+        if (Array.isArray(eventsData)) setCustomEvents(eventsData);
+        if (Array.isArray(utilitiesData)) setUtilities(utilitiesData);
+        if (Array.isArray(buildsData)) setBuilds(buildsData);
+        
+        setQuotaExceeded(false);
+      } catch (err) {
+        console.error("Error polling data:", err);
+        // If it's a 500 error from our server, it might be credentials
+        if (err instanceof Error && err.message.includes('credentials')) {
+          setQuotaExceeded(true);
+        }
       }
-    }, (err) => handleFirestoreError(err, OperationType.GET, `users/${currentUser.uid}`));
-
-    return () => unsubProfile();
-  }, [isAuthReady, currentUser?.uid]);
-
-  useEffect(() => {
-    if (!isAuthReady || !currentUser) return;
-
-    const unsubRoster = onSnapshot(collection(db, 'roster'), (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RosterMember));
-      setRoster(data);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'roster'));
-
-    const unsubWoe = onSnapshot(doc(db, 'settings', 'woe'), (snapshot) => {
-      if (snapshot.exists()) {
-        setWoeSchedule(snapshot.data() as WoESchedule);
-      }
-    }, (err) => handleFirestoreError(err, OperationType.GET, 'settings/woe'));
-
-    const unsubEvents = onSnapshot(collection(db, 'events'), (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ROEvent));
-      setCustomEvents(data);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'events'));
-
-    const unsubUtilities = onSnapshot(collection(db, 'utilities'), (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UtilityPost));
-      setUtilities(data);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'utilities'));
-
-    const unsubBuilds = onSnapshot(collection(db, 'builds'), (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ClassBuild));
-      setBuilds(data);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'builds'));
-
-    return () => {
-      unsubRoster();
-      unsubWoe();
-      unsubEvents();
-      unsubUtilities();
-      unsubBuilds();
     };
+
+    // Initial fetch
+    fetchAllData();
+
+    // Poll every 10 seconds for "real-time" feel without Firestore limits
+    const interval = setInterval(fetchAllData, 10000);
+
+    return () => clearInterval(interval);
   }, [isAuthReady, currentUser?.uid]);
 
   useEffect(() => {
@@ -452,12 +397,18 @@ export default function App() {
       return;
     }
 
-    const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-      setUsers(data);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
+    const fetchUsers = async () => {
+      try {
+        const data = await fetch('/api/users').then(res => res.json());
+        if (Array.isArray(data)) setUsers(data);
+      } catch (err) {
+        console.error("Error fetching users:", err);
+      }
+    };
 
-    return () => unsubUsers();
+    fetchUsers();
+    const interval = setInterval(fetchUsers, 15000); // Users list less frequent
+    return () => clearInterval(interval);
   }, [isAuthReady, currentUser?.uid, userProfile?.role]);
 
   // Derived Login State
@@ -483,11 +434,20 @@ export default function App() {
       const user = userCredential.user;
       
       const newProfile = {
+        uid: user.uid,
         username: loginUserInput,
         role: loginEmail === 'noleirodrigues@gmail.com' ? 'admin' : 'player',
-        approved: loginEmail === 'noleirodrigues@gmail.com'
+        approved: loginEmail === 'noleirodrigues@gmail.com',
+        email: loginEmail,
+        createdAt: new Date().toISOString()
       };
-      await setDoc(doc(db, 'users', user.uid), newProfile);
+
+      await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newProfile)
+      });
+
       setUserProfile(newProfile);
     } catch (error: any) {
       console.error("Register error:", error);
@@ -558,25 +518,31 @@ export default function App() {
   const handleAddBuild = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const newBuild: Partial<ClassBuild> = {
+      const newBuild = {
         ...buildForm,
-        image: buildForm.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${buildForm.className}${buildForm.version}`
+        id: buildForm.id || crypto.randomUUID(),
+        image: buildForm.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${buildForm.className}${buildForm.version}`,
+        createdAt: new Date().toISOString()
       };
-      await addDoc(collection(db, 'builds'), newBuild);
+      await fetch('/api/builds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newBuild)
+      });
       setIsBuildAdminOpen(false);
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'builds');
+      console.error("Error adding build:", err);
     }
   };
 
   const handleDeleteBuild = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'builds', id));
+      await fetch(`/api/builds?id=${id}`, { method: 'DELETE' });
       if (selectedBuildId === id) {
         setSelectedBuildId(builds.find(b => b.id !== id)?.id || null);
       }
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `builds/${id}`);
+      console.error("Error deleting build:", err);
     }
   };
 
@@ -662,35 +628,45 @@ export default function App() {
     
     try {
       if (editingUtilityId) {
-        await updateDoc(doc(db, 'utilities', editingUtilityId), {
-          title: utilityForm.title,
-          content: utilityForm.content,
-          category: utilityForm.category
+        await fetch('/api/utilities', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: editingUtilityId,
+            title: utilityForm.title,
+            content: utilityForm.content,
+            category: utilityForm.category
+          })
         });
         setEditingUtilityId(null);
       } else {
         const newPost = {
+          id: crypto.randomUUID(),
           title: utilityForm.title,
           content: utilityForm.content,
           category: utilityForm.category,
           author: userProfile?.username || 'Admin',
           createdAt: new Date().toISOString()
         };
-        await addDoc(collection(db, 'utilities'), newPost);
+        await fetch('/api/utilities', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newPost)
+        });
       }
       
       setUtilityForm({ title: '', content: '', category: isAdmin ? utilityCategories[0] : playerAllowedCategory });
       setIsUtilityAdminOpen(false);
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, 'utilities');
+      console.error("Error saving utility:", err);
     }
   };
 
   const deleteUtilityPost = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'utilities', id));
+      await fetch(`/api/utilities?id=${id}`, { method: 'DELETE' });
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `utilities/${id}`);
+      console.error("Error deleting utility:", err);
     }
   };
 
@@ -700,43 +676,56 @@ export default function App() {
     if (!rosterFormClass) return;
     try {
       const newMember = {
+        id: crypto.randomUUID(),
         name: rosterFormName.trim() || '',
         className: rosterFormClass,
         version: rosterFormVersion.trim() || 'Default',
         confirmed: null
       };
-      await addDoc(collection(db, 'roster'), newMember);
+      await fetch('/api/roster', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newMember)
+      });
       setRosterFormName('');
       setRosterFormClass('');
       setRosterFormVersion('');
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'roster');
+      console.error("Error adding roster member:", err);
     }
   };
 
   const deleteRosterMember = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'roster', id));
+      await fetch(`/api/roster?id=${id}`, { method: 'DELETE' });
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `roster/${id}`);
+      console.error("Error deleting roster member:", err);
     }
   };
 
   const updateRosterMemberName = async (id: string, newName: string) => {
     try {
-      await updateDoc(doc(db, 'roster', id), { name: newName });
+      await fetch('/api/roster', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, name: newName })
+      });
       setEditingMemberId(null);
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `roster/${id}`);
+      console.error("Error updating roster name:", err);
     }
   };
 
   const updateRosterMemberClass = async (id: string, newClass: string, newVersion: string) => {
     try {
-      await updateDoc(doc(db, 'roster', id), { className: newClass, version: newVersion });
+      await fetch('/api/roster', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, className: newClass, version: newVersion })
+      });
       setEditingMemberId(null);
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `roster/${id}`);
+      console.error("Error updating roster class:", err);
     }
   };
 
@@ -744,12 +733,17 @@ export default function App() {
     try {
       const member = roster.find(m => m.id === id);
       if (member) {
-        await updateDoc(doc(db, 'roster', id), { 
-          confirmed: member.confirmed === status ? null : status 
+        await fetch('/api/roster', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            id, 
+            confirmed: member.confirmed === status ? null : status 
+          })
         });
       }
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `roster/${id}`);
+      console.error("Error updating confirmation:", err);
     }
   };
 
@@ -944,6 +938,7 @@ export default function App() {
 
     try {
       const newEvent = {
+        id: crypto.randomUUID(),
         name: formTitle,
         description: formDesc || 'Evento criado pela Staff.',
         prizes: formPrize ? formPrize.split(',').map(p => p.trim()) : ['Premiação a definir'],
@@ -951,7 +946,11 @@ export default function App() {
         category: formCategory
       };
 
-      await addDoc(collection(db, 'events'), newEvent);
+      await fetch('/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newEvent)
+      });
       
       // Reset form
       setFormTime('');
@@ -960,15 +959,15 @@ export default function App() {
       setFormDesc('');
       setIsStaffPanelOpen(false);
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'events');
+      console.error("Error adding event:", err);
     }
   };
 
   const handleDeleteEvent = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'events', id));
+      await fetch(`/api/events?id=${id}`, { method: 'DELETE' });
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `events/${id}`);
+      console.error("Error deleting event:", err);
     }
   };
 
@@ -985,6 +984,27 @@ export default function App() {
         />
         <div className="absolute inset-0 bg-emerald-950/5" />
       </div>
+
+      {/* Quota Exceeded Banner */}
+      <AnimatePresence>
+        {quotaExceeded && (
+          <motion.div 
+            initial={{ y: -100 }}
+            animate={{ y: 0 }}
+            exit={{ y: -100 }}
+            className="fixed top-0 left-0 right-0 z-[2000] bg-yellow-500 text-zinc-950 px-4 py-2 text-center font-black text-[10px] uppercase tracking-widest shadow-xl flex items-center justify-center gap-3"
+          >
+            <AlertCircle size={16} />
+            <span>Limite de uso do banco de dados atingido. Algumas informações podem não carregar até amanhã.</span>
+            <button 
+              onClick={() => setQuotaExceeded(false)}
+              className="p-1 hover:bg-black/10 rounded-full transition-colors"
+            >
+              <X size={14} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Login Overlay */}
       <AnimatePresence>
@@ -1106,9 +1126,11 @@ export default function App() {
         )}
       </AnimatePresence>
 
+
+
       {/* Approval Pending Overlay */}
       <AnimatePresence>
-        {isLoggedIn && userProfile && !userProfile.approved && (
+        {isLoggedIn && userProfile && !userProfile.approved && currentUser?.email !== 'noleirodrigues@gmail.com' && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -2187,9 +2209,13 @@ export default function App() {
                                     onChange={async (e) => {
                                       const newDays = e.target.value.split(',').map(d => d.trim());
                                       try {
-                                        await setDoc(doc(db, 'settings', 'woe'), { ...woeSchedule, days: newDays });
+                                        await fetch('/api/settings_woe', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ ...woeSchedule, id: 'main', days: newDays })
+                                        });
                                       } catch (err) {
-                                        handleFirestoreError(err, OperationType.WRITE, 'settings/woe');
+                                        console.error("Error updating woe days:", err);
                                       }
                                     }}
                                     className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
@@ -2202,9 +2228,13 @@ export default function App() {
                                         value={woeSchedule.startTime}
                                         onChange={async (e) => {
                                           try {
-                                            await setDoc(doc(db, 'settings', 'woe'), { ...woeSchedule, startTime: e.target.value });
+                                            await fetch('/api/settings_woe', {
+                                              method: 'POST',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ ...woeSchedule, id: 'main', startTime: e.target.value })
+                                            });
                                           } catch (err) {
-                                            handleFirestoreError(err, OperationType.WRITE, 'settings/woe');
+                                            console.error("Error updating woe start time:", err);
                                           }
                                         }}
                                         className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
@@ -2217,9 +2247,13 @@ export default function App() {
                                         value={woeSchedule.endTime}
                                         onChange={async (e) => {
                                           try {
-                                            await setDoc(doc(db, 'settings', 'woe'), { ...woeSchedule, endTime: e.target.value });
+                                            await fetch('/api/settings_woe', {
+                                              method: 'POST',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ ...woeSchedule, id: 'main', endTime: e.target.value })
+                                            });
                                           } catch (err) {
-                                            handleFirestoreError(err, OperationType.WRITE, 'settings/woe');
+                                            console.error("Error updating woe end time:", err);
                                           }
                                         }}
                                         className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
@@ -2242,9 +2276,13 @@ export default function App() {
                                           value={u.role}
                                           onChange={async (e) => {
                                             try {
-                                              await updateDoc(doc(db, 'users', u.id), { role: e.target.value });
+                                              await fetch('/api/users', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ id: u.id, role: e.target.value })
+                                              });
                                             } catch (err) {
-                                              handleFirestoreError(err, OperationType.UPDATE, `users/${u.id}`);
+                                              console.error("Error updating user role:", err);
                                             }
                                           }}
                                           className="bg-emerald-950/50 border border-emerald-500/20 rounded px-2 py-0.5 text-[8px] font-black text-emerald-500 uppercase tracking-widest focus:outline-none focus:border-yellow-500"
@@ -2255,9 +2293,13 @@ export default function App() {
                                         <button
                                           onClick={async () => {
                                             try {
-                                              await updateDoc(doc(db, 'users', u.id), { approved: !u.approved });
+                                              await fetch('/api/users', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ id: u.id, approved: !u.approved })
+                                              });
                                             } catch (err) {
-                                              handleFirestoreError(err, OperationType.UPDATE, `users/${u.id}`);
+                                              console.error("Error toggling approval:", err);
                                             }
                                           }}
                                           className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest transition-colors ${u.approved ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30' : 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/30'}`}
@@ -2271,9 +2313,9 @@ export default function App() {
                                         onClick={async () => {
                                           if (confirm(`Deseja realmente excluir o perfil de ${u.username}?`)) {
                                             try {
-                                              await deleteDoc(doc(db, 'users', u.id));
+                                              await fetch(`/api/users?id=${u.id}`, { method: 'DELETE' });
                                             } catch (err) {
-                                              handleFirestoreError(err, OperationType.DELETE, `users/${u.id}`);
+                                              console.error("Error deleting user:", err);
                                             }
                                           }
                                         }}
