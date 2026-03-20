@@ -139,6 +139,8 @@ export interface WoESchedule {
   days: string[];
   startTime: string;
   endTime: string;
+  title?: string;
+  date?: string;
 }
 
 interface User {
@@ -279,7 +281,50 @@ export default function App() {
   // Roster State
   const [isRosterOpen, setIsRosterOpen] = useState(false);
   const [roster, setRoster] = useState<RosterMember[]>([]);
-  const [woeSchedule, setWoeSchedule] = useState<WoESchedule>({ days: ['Terça', 'Quinta', 'Sábado'], startTime: '20:00', endTime: '21:00' });
+  const [woeSchedule, setWoeSchedule] = useState<WoESchedule>({ days: [], startTime: '20:00', endTime: '21:00', title: 'Guerra do Emperium', date: '' });
+  const [woeForm, setWoeForm] = useState<WoESchedule>({ days: [], startTime: '', endTime: '', title: '', date: '' });
+
+  useEffect(() => {
+    setWoeForm(woeSchedule);
+  }, [woeSchedule]);
+
+  const handleWoeDateChange = (dateStr: string) => {
+    if (!dateStr) {
+      setWoeForm(prev => ({ ...prev, date: '' }));
+      return;
+    }
+    
+    try {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const dateObj = new Date(year, month - 1, day);
+      const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+      const dayName = dayNames[dateObj.getDay()];
+      const formattedDate = dateObj.toLocaleDateString('pt-BR');
+      
+      setWoeForm(prev => ({ 
+        ...prev, 
+        date: dateStr,
+        title: `Guerra - ${dayName} (${formattedDate})`
+      }));
+    } catch (e) {
+      setWoeForm(prev => ({ ...prev, date: dateStr }));
+    }
+  };
+
+  const saveWoeSettings = async () => {
+    try {
+      await fetch('/api/settings_woe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...woeForm, id: 'main' })
+      });
+      setWoeSchedule(woeForm);
+      alert("Configuração da Guerra salva com sucesso!");
+    } catch (err) {
+      console.error("Error saving woe settings:", err);
+      alert("Erro ao salvar configuração da guerra.");
+    }
+  };
   const [classTypes, setClassTypes] = useState<string[]>(['Paladin', 'Professor', 'Clown', 'High Wizard', 'Creator', 'Sniper', 'Stalker', 'Champion']);
 
   // Users State
@@ -499,6 +544,27 @@ export default function App() {
   const [rosterFormName, setRosterFormName] = useState('');
   const [rosterFormClass, setRosterFormClass] = useState('');
   const [rosterFormVersion, setRosterFormVersion] = useState('');
+  const [rosterStatus, setRosterStatus] = useState<{ type: 'idle' | 'loading' | 'success' | 'error', message?: string }>({ type: 'idle' });
+
+  const testSheetsConnection = async () => {
+    setRosterStatus({ type: 'loading', message: 'Testando conexão...' });
+    try {
+      const response = await fetch('/api/test-sheets');
+      const data = await response.json();
+      if (data.success) {
+        const sheetNames = data.sheets.map((s: any) => s.title).join(', ');
+        setRosterStatus({ 
+          type: 'success', 
+          message: `Conectado: "${data.spreadsheetTitle}". Abas: [${sheetNames}]` 
+        });
+      } else {
+        throw new Error(data.error || 'Erro na resposta do servidor');
+      }
+    } catch (err: any) {
+      setRosterStatus({ type: 'error', message: `Falha na conexão: ${err.message}` });
+    }
+    setTimeout(() => setRosterStatus({ type: 'idle' }), 8000);
+  };
 
   // Builds State
   const [isBuildsOpen, setIsBuildsOpen] = useState(false);
@@ -546,7 +612,18 @@ export default function App() {
         const errData = await response.json();
         throw new Error(errData.error || 'Failed to save build');
       }
+
+      // Update local state
+      setBuilds(prev => {
+        const exists = prev.find(b => b.id === newBuild.id);
+        if (exists) {
+          return prev.map(b => b.id === newBuild.id ? newBuild as ClassBuild : b);
+        }
+        return [...prev, newBuild as ClassBuild];
+      });
+
       setIsBuildAdminOpen(false);
+      setSelectedBuildId(newBuild.id);
     } catch (err) {
       console.error("Error adding build:", err);
     }
@@ -554,9 +631,15 @@ export default function App() {
 
   const handleDeleteBuild = async (id: string) => {
     try {
-      await fetch(`/api/builds?id=${id}`, { method: 'DELETE' });
-      if (selectedBuildId === id) {
-        setSelectedBuildId(builds.find(b => b.id !== id)?.id || null);
+      const response = await fetch(`/api/builds?id=${id}`, { method: 'DELETE' });
+      if (response.ok) {
+        // Update local state
+        setBuilds(prev => prev.filter(b => b.id !== id));
+        if (selectedBuildId === id) {
+          setSelectedBuildId(builds.find(b => b.id !== id)?.id || null);
+        }
+      } else {
+        throw new Error('Failed to delete build');
       }
     } catch (err) {
       console.error("Error deleting build:", err);
@@ -641,49 +724,62 @@ export default function App() {
 
   const addUtilityPost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!utilityForm.title || !utilityForm.content) return;
+    if (!utilityForm.title || !utilityForm.content) {
+      console.warn("Title and content are required for utility post");
+      return;
+    }
     
     try {
+      const newPost = editingUtilityId ? {
+        id: editingUtilityId,
+        title: utilityForm.title,
+        content: utilityForm.content,
+        category: utilityForm.category
+      } : {
+        id: generateId(),
+        title: utilityForm.title,
+        content: utilityForm.content,
+        category: utilityForm.category,
+        author: userProfile?.username || currentUser?.email?.split('@')[0] || 'Admin',
+        createdAt: new Date().toISOString()
+      };
+
+      const response = await fetch('/api/utilities', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newPost)
+      });
+      
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to save utility');
+      }
+      
+      // Update local state
       if (editingUtilityId) {
-        const response = await fetch('/api/utilities', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: editingUtilityId,
-            title: utilityForm.title,
-            content: utilityForm.content,
-            category: utilityForm.category
-          })
-        });
-        if (!response.ok) throw new Error('Failed to update utility');
+        setUtilities(prev => prev.map(u => u.id === editingUtilityId ? { ...u, ...newPost } : u));
         setEditingUtilityId(null);
       } else {
-        const newPost = {
-          id: generateId(),
-          title: utilityForm.title,
-          content: utilityForm.content,
-          category: utilityForm.category,
-          author: userProfile?.username || 'Admin',
-          createdAt: new Date().toISOString()
-        };
-        const response = await fetch('/api/utilities', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newPost)
-        });
-        if (!response.ok) throw new Error('Failed to create utility');
+        setUtilities(prev => [newPost as UtilityPost, ...prev]);
       }
       
       setUtilityForm({ title: '', content: '', category: isAdmin ? utilityCategories[0] : playerAllowedCategory });
       setIsUtilityAdminOpen(false);
-    } catch (err) {
-      console.error("Error saving utility:", err);
+      alert("Utilidade salva com sucesso!");
+    } catch (err: any) {
+      console.error("Error saving utility:", err.message);
+      alert(`Erro ao salvar utilidade: ${err.message}`);
     }
   };
 
   const deleteUtilityPost = async (id: string) => {
     try {
-      await fetch(`/api/utilities?id=${id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/utilities?id=${id}`, { method: 'DELETE' });
+      if (response.ok) {
+        setUtilities(prev => prev.filter(u => u.id !== id));
+      } else {
+        throw new Error('Failed to delete utility');
+      }
     } catch (err) {
       console.error("Error deleting utility:", err);
     }
@@ -692,32 +788,55 @@ export default function App() {
   // Roster CRUD
   const addRosterMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!rosterFormClass) return;
+    if (!rosterFormClass) {
+      console.warn("Cannot add member: Class is not selected.");
+      return;
+    }
+    setRosterStatus({ type: 'loading', message: 'Adicionando ao plantel...' });
     try {
       const newMember = {
         id: generateId(),
-        name: rosterFormName.trim() || '',
+        name: rosterFormName.trim() || 'Sem Nome',
         className: rosterFormClass,
         version: rosterFormVersion.trim() || 'Default',
         confirmed: null
       };
+      console.log("Attempting to add roster member:", newMember);
       const response = await fetch('/api/roster', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newMember)
       });
-      if (!response.ok) throw new Error('Failed to add roster member');
+      
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to add roster member');
+      }
+      
+      console.log("Roster member added successfully");
+      // Update local state immediately
+      setRoster(prev => [...prev, newMember as RosterMember]);
+      
+      setRosterStatus({ type: 'success', message: 'Membro adicionado com sucesso!' });
       setRosterFormName('');
       setRosterFormClass('');
       setRosterFormVersion('');
-    } catch (err) {
-      console.error("Error adding roster member:", err);
+    } catch (err: any) {
+      console.error("Error adding roster member:", err.message);
+      setRosterStatus({ type: 'error', message: `Erro: ${err.message}` });
     }
+    setTimeout(() => setRosterStatus({ type: 'idle' }), 4000);
   };
 
   const deleteRosterMember = async (id: string) => {
     try {
-      await fetch(`/api/roster?id=${id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/roster?id=${id}`, { method: 'DELETE' });
+      if (response.ok) {
+        // Update local state immediately
+        setRoster(prev => prev.filter(m => m.id !== id));
+      } else {
+        throw new Error('Failed to delete roster member');
+      }
     } catch (err) {
       console.error("Error deleting roster member:", err);
     }
@@ -725,6 +844,9 @@ export default function App() {
 
   const updateRosterMemberName = async (id: string, newName: string) => {
     try {
+      // Optimistic update
+      setRoster(prev => prev.map(m => m.id === id ? { ...m, name: newName } : m));
+      
       await fetch('/api/roster', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -738,6 +860,9 @@ export default function App() {
 
   const updateRosterMemberClass = async (id: string, newClass: string, newVersion: string) => {
     try {
+      // Optimistic update
+      setRoster(prev => prev.map(m => m.id === id ? { ...m, className: newClass, version: newVersion } : m));
+      
       await fetch('/api/roster', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -749,26 +874,71 @@ export default function App() {
     }
   };
 
-  const updateConfirmation = async (id: string, status: boolean | null) => {
+  const resetRosterPresence = async () => {
+    if (!confirm("Deseja realmente resetar todas as presenças do plantel?")) return;
+    
     try {
-      const member = roster.find(m => m.id === id);
-      if (member) {
-        await fetch('/api/roster', {
+      const updatedRoster = roster.map(m => ({ ...m, confirmed: null }));
+      setRoster(updatedRoster);
+      
+      // Update each member in the spreadsheet
+      await Promise.all(roster.map(m => 
+        fetch('/api/roster', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            id, 
-            confirmed: member.confirmed === status ? null : status 
-          })
-        });
-      }
+          body: JSON.stringify({ id: m.id, confirmed: null })
+        })
+      ));
+      
+      alert("Presenças resetadas com sucesso!");
+    } catch (err) {
+      console.error("Error resetting presence:", err);
+      alert("Erro ao resetar presenças.");
+    }
+  };
+
+  const updateConfirmation = async (id: string, status: boolean | null) => {
+    const member = roster.find(m => m.id === id);
+    if (!member) return;
+
+    const newStatus = member.confirmed === status ? null : status;
+    
+    // Optimistic update
+    setRoster(prev => prev.map(m => m.id === id ? { ...m, confirmed: newStatus } : m));
+
+    try {
+      await fetch('/api/roster', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          id, 
+          confirmed: newStatus 
+        })
+      });
     } catch (err) {
       console.error("Error updating confirmation:", err);
+      // Rollback on error
+      setRoster(prev => prev.map(m => m.id === id ? { ...m, confirmed: member.confirmed } : m));
     }
   };
 
   // Next War Logic
   const nextWarInfo = useMemo(() => {
+    if (woeSchedule.date) {
+      try {
+        const [year, month, day] = woeSchedule.date.split('-').map(Number);
+        const dateObj = new Date(year, month - 1, day);
+        const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+        return {
+          date: dateObj.toLocaleDateString('pt-BR'),
+          dayName: dayNames[dateObj.getDay()],
+          title: woeSchedule.title || 'Guerra do Emperium'
+        };
+      } catch (e) {
+        console.error("Error parsing manual date:", e);
+      }
+    }
+
     if (!woeSchedule.days.length) return null;
     
     const dayMap: Record<string, number> = {
@@ -803,9 +973,10 @@ export default function App() {
     const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
     return {
       date: nextDate.toLocaleDateString('pt-BR'),
-      dayName: dayNames[nextDayIndex]
+      dayName: dayNames[nextDayIndex],
+      title: woeSchedule.title || 'Guerra do Emperium'
     };
-  }, [woeSchedule.days]);
+  }, [woeSchedule.days, woeSchedule.date, woeSchedule.title]);
 
   // Available classes from builds
   const availableClasses = useMemo(() => {
@@ -2105,6 +2276,7 @@ export default function App() {
                       <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Próxima Guerra</p>
                       {nextWarInfo ? (
                         <>
+                          <p className="text-xs font-black text-yellow-500 uppercase mb-0.5">{nextWarInfo.title}</p>
                           <p className="text-sm font-bold text-white">{nextWarInfo.dayName}, {nextWarInfo.date}</p>
                           <p className="text-[10px] text-emerald-400 font-bold">{woeSchedule.startTime} às {woeSchedule.endTime}</p>
                         </>
@@ -2169,8 +2341,25 @@ export default function App() {
                             <>
                               {/* Member Form */}
                               <div className="bg-emerald-900/40 border border-yellow-500/30 rounded-2xl p-4 space-y-3">
-                                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Adicionar Integrante</p>
+                                <div className="flex items-center justify-between mb-1">
+                                  <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Adicionar Integrante</p>
+                                  <button 
+                                    onClick={testSheetsConnection}
+                                    className="text-[8px] text-yellow-500 hover:text-yellow-400 uppercase font-bold flex items-center gap-1"
+                                  >
+                                    <Activity size={8} /> Testar Planilha
+                                  </button>
+                                </div>
                                 <form onSubmit={addRosterMember} className="space-y-3">
+                                  {rosterStatus.type !== 'idle' && (
+                                    <div className={`text-[10px] p-2 rounded border ${
+                                      rosterStatus.type === 'error' ? 'bg-red-500/10 border-red-500/50 text-red-400' :
+                                      rosterStatus.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400' :
+                                      'bg-yellow-500/10 border-yellow-500/50 text-yellow-400'
+                                    }`}>
+                                      {rosterStatus.message}
+                                    </div>
+                                  )}
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div className="space-y-3">
                                       <div className="relative">
@@ -2222,41 +2411,32 @@ export default function App() {
                               <div className="bg-emerald-900/40 border border-emerald-500/30 rounded-2xl p-4 space-y-3">
                                 <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Configurar Guerra</p>
                                 <div className="space-y-3">
-                                  <input 
-                                    type="text" 
-                                    placeholder="Dias (ex: Ter, Qui, Sáb)"
-                                    value={woeSchedule.days.join(', ')}
-                                    onChange={async (e) => {
-                                      const newDays = e.target.value.split(',').map(d => d.trim());
-                                      try {
-                                        await fetch('/api/settings_woe', {
-                                          method: 'POST',
-                                          headers: { 'Content-Type': 'application/json' },
-                                          body: JSON.stringify({ ...woeSchedule, id: 'main', days: newDays })
-                                        });
-                                      } catch (err) {
-                                        console.error("Error updating woe days:", err);
-                                      }
-                                    }}
-                                    className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
-                                  />
+                                  <div>
+                                    <label className="block text-[8px] font-black text-emerald-600 uppercase mb-1">Nome da Guerra</label>
+                                    <input 
+                                      type="text" 
+                                      placeholder="Ex: Guerra das Vilas"
+                                      value={woeForm.title}
+                                      onChange={(e) => setWoeForm(prev => ({ ...prev, title: e.target.value }))}
+                                      className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[8px] font-black text-emerald-600 uppercase mb-1">Data da Guerra</label>
+                                    <input 
+                                      type="date" 
+                                      value={woeForm.date}
+                                      onChange={(e) => handleWoeDateChange(e.target.value)}
+                                      className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
+                                    />
+                                  </div>
                                   <div className="grid grid-cols-2 gap-3">
                                     <div>
                                       <label className="block text-[8px] font-black text-emerald-600 uppercase mb-1">Início</label>
                                       <input 
                                         type="time" 
-                                        value={woeSchedule.startTime}
-                                        onChange={async (e) => {
-                                          try {
-                                            await fetch('/api/settings_woe', {
-                                              method: 'POST',
-                                              headers: { 'Content-Type': 'application/json' },
-                                              body: JSON.stringify({ ...woeSchedule, id: 'main', startTime: e.target.value })
-                                            });
-                                          } catch (err) {
-                                            console.error("Error updating woe start time:", err);
-                                          }
-                                        }}
+                                        value={woeForm.startTime}
+                                        onChange={(e) => setWoeForm(prev => ({ ...prev, startTime: e.target.value }))}
                                         className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
                                       />
                                     </div>
@@ -2264,43 +2444,89 @@ export default function App() {
                                       <label className="block text-[8px] font-black text-emerald-600 uppercase mb-1">Término</label>
                                       <input 
                                         type="time" 
-                                        value={woeSchedule.endTime}
-                                        onChange={async (e) => {
-                                          try {
-                                            await fetch('/api/settings_woe', {
-                                              method: 'POST',
-                                              headers: { 'Content-Type': 'application/json' },
-                                              body: JSON.stringify({ ...woeSchedule, id: 'main', endTime: e.target.value })
-                                            });
-                                          } catch (err) {
-                                            console.error("Error updating woe end time:", err);
-                                          }
-                                        }}
+                                        value={woeForm.endTime}
+                                        onChange={(e) => setWoeForm(prev => ({ ...prev, endTime: e.target.value }))}
                                         className="w-full bg-emerald-950/50 border border-emerald-500/20 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-500"
                                       />
                                     </div>
                                   </div>
+                                  <button 
+                                    onClick={saveWoeSettings}
+                                    className="w-full bg-yellow-500 hover:bg-yellow-400 text-emerald-950 font-black text-[10px] py-2 rounded-lg transition-all shadow-lg shadow-yellow-500/20 flex items-center justify-center gap-2"
+                                  >
+                                    SALVAR CONFIGURAÇÃO
+                                  </button>
                                 </div>
+                              </div>
+
+                              {/* Reset Presence */}
+                              <div className="bg-red-900/20 border border-red-500/30 rounded-2xl p-4 space-y-3">
+                                <p className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-1">Manutenção do Plantel</p>
+                                <button 
+                                  onClick={resetRosterPresence}
+                                  className="w-full bg-red-500/20 hover:bg-red-500/40 text-red-400 border border-red-500/30 font-black text-[10px] py-2 rounded-lg transition-all flex items-center justify-center gap-2"
+                                >
+                                  RESETAR TODAS AS PRESENÇAS
+                                </button>
+                                <p className="text-[8px] text-red-500/60 text-center italic">Use isso para limpar o plantel para a próxima guerra.</p>
                               </div>
                             </>
                           ) : (
                             <div className="space-y-4">
                               {/* Users List */}
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Usuários Cadastrados ({users.length})</p>
+                                <button 
+                                  onClick={async () => {
+                                    if (currentUser) {
+                                      try {
+                                        await fetch('/api/users', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({
+                                            uid: currentUser.uid,
+                                            username: userProfile?.username || currentUser.email?.split('@')[0],
+                                            email: currentUser.email,
+                                            role: userProfile?.role || 'player',
+                                            approved: userProfile?.approved ?? false,
+                                            lastLogin: new Date().toISOString()
+                                          })
+                                        });
+                                        alert("Seu perfil foi sincronizado com a planilha!");
+                                      } catch (err) {
+                                        console.error("Error syncing user:", err);
+                                        alert("Erro ao sincronizar perfil.");
+                                      }
+                                    }
+                                  }}
+                                  className="text-[8px] font-black text-emerald-500 hover:text-white uppercase tracking-tighter"
+                                >
+                                  Sincronizar Meu Perfil
+                                </button>
+                              </div>
                               <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
                                 {users.map(u => (
-                                  <div key={u.id} className="flex items-center justify-between p-3 bg-emerald-900/20 border border-emerald-500/10 rounded-xl">
+                                  <div key={u.uid || u.id} className="flex items-center justify-between p-3 bg-emerald-900/20 border border-emerald-500/10 rounded-xl">
                                     <div>
-                                      <p className="text-xs font-black text-white">{u.username}</p>
+                                      <p className="text-xs font-black text-white">{u.username || u.email?.split('@')[0]}</p>
+                                      <p className="text-[8px] text-emerald-500/60 font-bold">{u.email}</p>
                                       <div className="flex items-center gap-2 mt-1">
                                         <select 
                                           value={u.role}
                                           onChange={async (e) => {
+                                            const updatedRole = e.target.value;
+                                            // Prevent self-demotion
+                                            if ((u.uid || u.id) === currentUser?.uid && updatedRole !== 'admin') {
+                                              alert("Você não pode remover seu próprio cargo de Administrador.");
+                                              return;
+                                            }
                                             try {
                                               await fetch('/api/users', {
                                                 method: 'POST',
                                                 headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ id: u.id, role: e.target.value })
+                                                body: JSON.stringify({ uid: u.uid || u.id, role: updatedRole })
                                               });
+                                              setUsers(prev => prev.map(user => (user.uid === (u.uid || u.id) || user.id === (u.uid || u.id)) ? { ...user, role: updatedRole } : user));
                                             } catch (err) {
                                               console.error("Error updating user role:", err);
                                             }
@@ -2312,12 +2538,19 @@ export default function App() {
                                         </select>
                                         <button
                                           onClick={async () => {
+                                            const newApproved = !u.approved;
+                                            // Prevent self-de-approval
+                                            if ((u.uid || u.id) === currentUser?.uid && !newApproved) {
+                                              alert("Você não pode remover sua própria aprovação.");
+                                              return;
+                                            }
                                             try {
                                               await fetch('/api/users', {
                                                 method: 'POST',
                                                 headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ id: u.id, approved: !u.approved })
+                                                body: JSON.stringify({ uid: u.uid || u.id, approved: newApproved })
                                               });
+                                              setUsers(prev => prev.map(user => (user.uid === (u.uid || u.id) || user.id === (u.uid || u.id)) ? { ...user, approved: newApproved } : user));
                                             } catch (err) {
                                               console.error("Error toggling approval:", err);
                                             }
@@ -2331,9 +2564,10 @@ export default function App() {
                                     {u.username !== 'admin' && u.id !== currentUser?.uid && (
                                       <button 
                                         onClick={async () => {
-                                          if (confirm(`Deseja realmente excluir o perfil de ${u.username}?`)) {
+                                          if (window.confirm(`Deseja realmente excluir o perfil de ${u.username || u.email}?`)) {
                                             try {
-                                              await fetch(`/api/users?id=${u.id}`, { method: 'DELETE' });
+                                              await fetch(`/api/users?id=${u.uid || u.id}`, { method: 'DELETE' });
+                                              setUsers(prev => prev.filter(user => (user.uid !== (u.uid || u.id) && user.id !== (u.uid || u.id))));
                                             } catch (err) {
                                               console.error("Error deleting user:", err);
                                             }
