@@ -64,7 +64,7 @@ enum OperationType {
 }
 
 // API Base URL for cross-origin requests (e.g., when hosted on Vercel)
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
 const generateId = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
